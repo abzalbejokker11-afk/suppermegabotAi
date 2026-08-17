@@ -1,37 +1,30 @@
 import os
-import requests
-import json
 import logging
+import requests
 from dotenv import load_dotenv
+from google import genai
 
 load_dotenv()
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Google GenAI client yaratish
+os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY or ""
+client = genai.Client()
+MODEL = "gemini-3.6-flash"
 
 def call_gemini(prompt):
     if not GEMINI_API_KEY:
-        return "Suni intellekt API kaliti sozlanmagan!"
-        
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+        return "Sun'iy intellekt API kaliti sozlanmagan!"
     
     try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            result = response.json()
-            return result['candidates'][0]['content']['parts'][0]['text']
-        else:
-            logging.error(f"Gemini API xatosi: {response.text}")
-            # Fallback to gemini-pro if flash fails
-            fallback_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-            fallback_response = requests.post(fallback_url, headers=headers, json=data)
-            if fallback_response.status_code == 200:
-                return fallback_response.json()['candidates'][0]['content']['parts'][0]['text']
-            return f"Xatolik yuz berdi: {fallback_response.status_code}"
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=prompt
+        )
+        return response.text
     except Exception as e:
-        logging.error(f"So'rovda xatolik: {e}")
+        logging.error(f"Gemini API xatosi: {e}")
         return f"Kechirasiz, xatolik yuz berdi: {str(e)}"
 
 def answer_question(question):
@@ -40,15 +33,15 @@ def answer_question(question):
 
 def generate_morning_post():
     try:
-        gh_resp = requests.get("https://api.github.com/search/repositories?q=stars:>5000&sort=updated&order=desc&per_page=3")
+        gh_resp = requests.get("https://api.github.com/search/repositories?q=stars:>5000&sort=updated&order=desc&per_page=3", timeout=10)
         if gh_resp.status_code == 200:
             items = gh_resp.json().get("items", [])
             news_text = "Bugungi GitHub IT yangiliklari:\n"
             for item in items:
-                news_text += f"- {item['name']}: {item['description']}\n"
+                news_text += f"- {item['name']}: {item.get('description', 'Tavsif mavjud emas')}\n"
         else:
             news_text = "Bugun IT olamida juda ko'p qiziqarli yangiliklar bo'lyapti."
-    except:
+    except Exception:
         news_text = "Bugun texnologiyalar olamida katta kashfiyotlar kuni bo'lishi kutilmoqda."
 
     prompt = f"""
