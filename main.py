@@ -43,21 +43,14 @@ class AdminStates(StatesGroup):
 
 # ----- ADMIN PANEL -----
 ADMIN_ID = 90581324
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
 @dp.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext):
     await state.clear()
     if message.from_user.id == ADMIN_ID:
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="🎛 Asosiy Boshqaruv")]],
-            resize_keyboard=True
-        )
-        await message.reply("Assalomu alaykum, Xo'jayin! Bot ishga tayyor.", reply_markup=keyboard)
+        await message.reply("Assalomu alaykum, Xo'jayin! Bot ishga tayyor.\n\nPastki chap burchakdagi **Menu** tugmasini bosib, Boshqaruv panelini ochishingiz mumkin.", parse_mode="Markdown")
     else:
         await message.reply("Assalomu alaykum! Men kanaldagi aqlli yordamchiman.")
 
-@dp.message(F.text == "🎛 Asosiy Boshqaruv")
 @dp.message(Command("admin"))
 async def admin_panel(message: Message, state: FSMContext):
     await state.clear()
@@ -196,9 +189,16 @@ async def send_person_post():
     except Exception as e:
         logging.error(f"Shaxsiy post xatolik: {e}")
 
+from aiogram.types import BotCommand
+
 async def main():
     logging.basicConfig(level=logging.INFO)
     keep_alive()
+
+    # Telegram'ning pastki chap burchagidagi Menu tugmasini sozlash
+    await bot.set_my_commands([
+        BotCommand(command="admin", description="👑 Boshqaruv paneli")
+    ])
 
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
     for hour in range(8, 23):
