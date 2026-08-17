@@ -8,7 +8,7 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyb
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
-from ai_handler import answer_question, generate_morning_post, generate_person_post
+from ai_handler import answer_question, generate_morning_post, generate_person_post, parse_reminder
 from keep_alive import keep_alive
 import edge_tts
 
@@ -40,6 +40,7 @@ from aiogram.fsm.context import FSMContext
 
 class AdminStates(StatesGroup):
     waiting_for_voice_text = State()
+    waiting_for_reminder = State()
 
 # ----- ADMIN PANEL -----
 ADMIN_ID = 90581324
@@ -103,6 +104,67 @@ async def custom_voice_prompt(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
     await message.reply("✍️ **Ovozga aylantirib, kanalga tashlamoqchi bo'lgan matningizni yozib yuboring:**\n\n*(Bekor qilish uchun Menu'dan boshqa narsa tanlang)*", parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_voice_text)
+
+@dp.message(AdminStates.waiting_for_voice_text)
+async def process_custom_voice(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID: return
+    await state.clear()
+    
+    wait_msg = await message.reply("⏳ Ovoz yaratilmoqda... Iltimos kuting.")
+    voice_filename = "custom_voice.ogg"
+    has_voice = await generate_voice(message.text, voice_filename)
+    
+    if has_voice and os.path.exists(voice_filename):
+        try:
+            voice_file = FSInputFile(voice_filename)
+            await bot.send_voice(chat_id=CHANNEL_ID, voice=voice_file, caption=f"🎙 Maxsus xabar:\n\n{message.text[:900]}")
+            os.remove(voice_filename)
+            await wait_msg.edit_text("✅ Ovozli xabar kanalingizga muvaffaqiyatli yuborildi!")
+        except Exception as e:
+            await wait_msg.edit_text(f"❌ Kanalga tashlashda xatolik: {e}")
+    else:
+        await wait_msg.edit_text("❌ Ovoz yaratishda xatolik yuz berdi.")
+
+# ----- ESLATMA YARATISH (SMART REMINDERS) -----
+async def send_reminder_post(text_to_post):
+    try:
+        voice_filename = f"reminder_{datetime.now().strftime('%H%M%S')}.ogg"
+        has_voice = await generate_voice(text_to_post, voice_filename)
+        caption = f"⏰ **ESLATMA!**\n\n{text_to_post}"
+        
+        if has_voice and os.path.exists(voice_filename):
+            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), caption=caption)
+            os.remove(voice_filename)
+        else:
+            await bot.send_message(chat_id=CHANNEL_ID, text=caption)
+    except Exception as e:
+        logging.error(f"Eslatma yuborishda xatolik: {e}")
+
+@dp.message(Command("eslatma"))
+async def reminder_prompt(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID: return
+    await message.reply("⏰ **Eslatmani yozing!**\nSana, vaqt va eslatma qilinishi kerak bo'lgan vazifani oddiy tilda yozavering.\n\n_Masalan: Ertaga soat 10:00 da Mirjalolga moy almashtirishni kanalga tashla._", parse_mode="Markdown")
+    await state.set_state(AdminStates.waiting_for_reminder)
+
+@dp.message(AdminStates.waiting_for_reminder)
+async def process_reminder(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID: return
+    await state.clear()
+    
+    wait_msg = await message.reply("⏳ Vaqt hisoblanmoqda... Kuting.")
+    parsed = parse_reminder(message.text)
+    
+    if "XATO" in parsed or "|" not in parsed:
+        await wait_msg.edit_text("❌ Kechirasiz, eslatma vaqtini tushunmadim. Iltimos, soat va kunni aniqroq yozing.")
+        return
+        
+    date_str, rem_text = parsed.split("|", 1)
+    try:
+        run_date = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
+        scheduler.add_job(send_reminder_post, 'date', run_date=run_date, args=[rem_text.strip()])
+        await wait_msg.edit_text(f"✅ **Eslatma o'rnatildi!**\n📅 Vaqti: {run_date.strftime('%Y-%m-%d %H:%M')}\n📝 Vazifa: {rem_text.strip()}")
+    except Exception as e:
+        await wait_msg.edit_text(f"❌ Vaqtni belgilashda xatolik: {e}")
 
 # ----- SAVOLLARGA JAVOB BERISH -----
 @dp.message()
@@ -173,7 +235,8 @@ async def main():
         BotCommand(command="rahmatillo", description="😎 Rahmatillo uchun post"),
         BotCommand(command="mirjalol", description="🤓 Mirjalol uchun post"),
         BotCommand(command="abdullo", description="🧐 Abdullo uchun post"),
-        BotCommand(command="maxsus_ovoz", description="🎙 Maxsus ovozli xabar")
+        BotCommand(command="maxsus_ovoz", description="🎙 Maxsus ovozli xabar"),
+        BotCommand(command="eslatma", description="⏰ Aniq vaqtli eslatma qo'shish")
     ])
 
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)

@@ -80,3 +80,18 @@ def generate_person_post(person_name):
     Postni shaxsan unga qaratib yoz. Mantiqli, hayotiy va kulgili bo'lsin. Juda cho'zib yuborma.
     """
     return call_gemini(prompt)
+
+import datetime
+def parse_reminder(text):
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = f"""
+    Sen vaqtni tahlil qiluvchi aqlli botsan. Hozirgi vaqt: {now}.
+    Foydalanuvchi ushbu eslatmani yozdi: "{text}"
+    Sening vazifang matndan sanani, soatni va eslatma mazmunini aniqlash.
+    Agar foydalanuvchi "ertaga", "indinga" kabi so'zlarni ishlatsa, hozirgi vaqtga qarab hisobla. Agar faqat soat berilsa va u o'tib ketgan bo'lsa, ertangi kunga o'tkaz.
+    Natijani faqat mana shu qat'iy formatda qaytar (ortiqcha so'z yozma):
+    YYYY-MM-DD HH:MM|eslatma mazmuni
+    Masalan: 2026-08-19 10:00|Mirjalolga moshina moyini almashtirishni eslatish
+    Agar vaqtni mutlaqo tushunmasang, faqatgina "XATO" deb yoz.
+    """
+    return call_gemini(prompt).strip()
