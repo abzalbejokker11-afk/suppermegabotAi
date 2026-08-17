@@ -36,7 +36,20 @@ async def generate_voice(text, filename="voice.ogg"):
 
 # ----- ADMIN PANEL -----
 ADMIN_ID = 90581324
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+@dp.message(Command("start"))
+async def start_cmd(message: Message):
+    if message.from_user.id == ADMIN_ID:
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="👨‍💻 Admin Panel")]],
+            resize_keyboard=True
+        )
+        await message.reply("Assalomu alaykum, Xo'jayin! Bot ishga tayyor.", reply_markup=keyboard)
+    else:
+        await message.reply("Assalomu alaykum! Men kanaldagi aqlli yordamchiman.")
+
+@dp.message(F.text == "👨‍💻 Admin Panel")
 @dp.message(Command("admin"))
 async def admin_panel(message: Message):
     if message.from_user.id != ADMIN_ID:
