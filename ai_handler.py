@@ -23,8 +23,11 @@ def call_gemini(prompt):
         )
         return response.text
     except Exception as e:
-        logging.error(f"Gemini API xatosi: {e}")
-        return f"Kechirasiz, xatolik yuz berdi: {str(e)}"
+        error_msg = str(e)
+        logging.error(f"Gemini API xatosi: {error_msg}")
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+            return "Kechirasiz, Sun'iy Intellekt hozir juda ko'p so'rov qabul qildi (Google bepul limitiga tushib qoldik). Iltimos, 1 daqiqa kutib turing va qayta urinib ko'ring!"
+        return f"Kechirasiz, xatolik yuz berdi: {error_msg}"
 
 def answer_question(question):
     prompt = f"Sen Telegram kanaldagi aqlli va pozitiv yordamchisan. Foydalanuvchi quyidagi savolni berdi:\n\"{question}\"\nUnga o'zbek tilida, do'stona, to'g'ri va yordam beruvchi ohangda qisqa javob yoz."
