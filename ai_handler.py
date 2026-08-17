@@ -9,8 +9,7 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Google GenAI client yaratish
-os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY or ""
-client = genai.Client()
+client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL = "gemini-3.6-flash"
 
 def call_gemini(prompt):
