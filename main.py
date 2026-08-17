@@ -90,6 +90,7 @@ async def handle_admin_post(callback: CallbackQuery):
 
 # ----- SAVOLLARGA JAVOB BERISH -----
 @dp.message()
+@dp.channel_post()
 async def handle_questions(message: Message):
     text = message.text or ""
     if not text.strip():
@@ -99,9 +100,14 @@ async def handle_questions(message: Message):
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == bot_me.id
     is_mentioned = bot_me.username and f"@{bot_me.username}" in text
 
+    # Agar u shaxsiy chat bo'lsa, YOKI ichida so'roq belgisi bo'lsa, YOKI unga reply qilingan bo'lsa
     if message.chat.type == 'private' or "?" in text or is_reply_to_bot or is_mentioned:
         try:
-            await bot.send_chat_action(chat_id=message.chat.id, action="typing")
+            # Kanalda chat action yuborish ba'zan xato berishi mumkin, shuning uchun try/except
+            try:
+                await bot.send_chat_action(chat_id=message.chat.id, action="typing")
+            except Exception:
+                pass
             answer = answer_question(text)
             await message.reply(answer)
         except Exception as e:
