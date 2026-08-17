@@ -44,18 +44,37 @@ def generate_morning_post():
     except Exception:
         news_text = "Bugun texnologiyalar olamida katta kashfiyotlar kuni bo'lishi kutilmoqda."
 
+    weather_text = ""
+    try:
+        w_resp = requests.get("https://wttr.in/Tashkent?format=%C+%t", timeout=5)
+        if w_resp.status_code == 200:
+            weather_text = f"Toshkentda hozirgi ob-havo: {w_resp.text.strip()}"
+    except Exception:
+        pass
+
     prompt = f"""
     Sen tajribali va xarizmatik IT blogersan. Telegram kanalingda ertalabki postni yozyapsan.
     Hozirgi yangiliklar:
     {news_text}
-    Shu yangiliklardan foydalanib, dasturchilar uchun juda qiziqarli, motivatsion va o'zbek tilida tonggi post tayyorla. Post ohangi do'stona va pozitiv bo'lsin. Emoji'lar ishlating.
+    {weather_text}
+    Shu ma'lumotlardan va ob-havodan foydalanib, dasturchilar uchun juda qiziqarli, motivatsion va o'zbek tilida tonggi post tayyorla. Post ohangi do'stona va pozitiv bo'lsin. Emoji'lar ishlating.
     """
     return call_gemini(prompt)
 
 def generate_person_post(person_name):
+    traits = {
+        "Mirjalol": "Moshina haydaydi. Unga doim mashina moyini vaqtida almashtirishni, mashinaga qarab yurishni eslat. Yaxshi haydovchi bo'lish bo'yicha maslahatlar ber va hazil qilib tur.",
+        "Rahmatillo": "Yoshi o'tib ketyapti, tezroq uylanishi kerak! Unga qiz topishga harakat qilishni, o'ziga qarab yurishni ayt. Hattoki hazillashib, yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverishini, asosiysi baxt ekanligini tushuntir.",
+        "Abdullo": "O'qishi kerak. Kitob o'qishga, kelajakka va o'qishga (universitetga) tayyorgarlik ko'rish eng muhim vazifasi ekanligini ta'kidla. Chalg'imasdan dars qilishini uqtir."
+    }
+    
+    trait = traits.get(person_name, "Unga pozitiv motivatsiya ber.")
+
     prompt = f"""
-    Sen juda aqlli va quvnoq botsan. {person_name} ismli yigit uchun maxsus telegram post tayyorlashing kerak.
-    Unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv ohangda bitta qisqa voqea, hazil yoki motivatsiya yozib ber. 
-    Postni shaxsan unga qaratib yoz. Mantiqli va hayotiy bo'lsin.
+    Sen juda aqlli, quvnoq va do'stona botsan. {person_name} ismli yigit uchun maxsus telegram post tayyorlashing kerak.
+    {person_name} haqida muhim ma'lumot: {trait}
+    
+    Ushbu ma'lumotlarga asoslanib unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv (hazil aralash) ohangda qisqa post yozib ber. 
+    Postni shaxsan unga qaratib yoz. Mantiqli, hayotiy va kulgili bo'lsin. Juda cho'zib yuborma.
     """
     return call_gemini(prompt)
