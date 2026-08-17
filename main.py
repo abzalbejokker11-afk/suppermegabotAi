@@ -15,7 +15,11 @@ import edge_tts
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+_raw_channel = os.getenv("CHANNEL_ID", "")
+if _raw_channel and not _raw_channel.startswith("-"):
+    CHANNEL_ID = f"-100{_raw_channel}"
+else:
+    CHANNEL_ID = _raw_channel
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
