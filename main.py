@@ -46,34 +46,26 @@ ADMIN_ID = 90581324
 @dp.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext):
     await state.clear()
-    if message.from_user.id == ADMIN_ID:
-        from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="🌅 Tonggi post")],
-                [KeyboardButton(text="😎 Rahmatillo"), KeyboardButton(text="🤓 Mirjalol"), KeyboardButton(text="🧐 Abdullo")],
-                [KeyboardButton(text="🎙 Maxsus ovozli xabar")]
-            ],
-            resize_keyboard=True,
-            persistent=True
-        )
-        await message.reply("👑 Xo'jayin, hamma tayyor postlar pastdagi klaviaturaga terib qo'yildi.\nBitta bossangiz bas, o'zi kanalga tashlaydi!", reply_markup=keyboard)
-    else:
-        await message.reply("Assalomu alaykum! Men kanaldagi aqlli yordamchiman.")
+    await message.reply("Assalomu alaykum! Pastki chap burchakdagi **Menu** tugmasini bosing va o'zingizga kerakli post turini tanlang. Men zudlik bilan ishga tushaman!", parse_mode="Markdown")
 
-# ----- POST YARATISH TUGMALARI -----
-@dp.message(F.text.in_(["🌅 Tonggi post", "😎 Rahmatillo", "🤓 Mirjalol", "🧐 Abdullo"]))
-async def handle_direct_post(message: Message):
+# ----- POST YARATISH BUYRUQLARI -----
+@dp.message(Command("tonggi_post"))
+@dp.message(Command("rahmatillo"))
+@dp.message(Command("mirjalol"))
+@dp.message(Command("abdullo"))
+async def handle_command_post(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
+    cmd = message.text.replace("/", "").split()[0].lower()
     action_map = {
-        "🌅 Tonggi post": "morning",
-        "😎 Rahmatillo": "Rahmatillo",
-        "🤓 Mirjalol": "Mirjalol",
-        "🧐 Abdullo": "Abdullo"
+        "tonggi_post": "morning",
+        "rahmatillo": "Rahmatillo",
+        "mirjalol": "Mirjalol",
+        "abdullo": "Abdullo"
     }
-    action = action_map[message.text]
+    action = action_map.get(cmd)
+    if not action: return
 
     wait_msg = await message.reply("⏳ Kanalga tayyorlanmoqda (10 soniya)... Iltimos kuting.")
 
@@ -106,10 +98,10 @@ async def handle_direct_post(message: Message):
         await wait_msg.edit_text(f"❌ Kanalga tashlashda xatolik!\nXato: {str(e)}")
 
 # ----- MAXSUS OVOZ YARATISH -----
-@dp.message(F.text == "🎙 Maxsus ovozli xabar")
+@dp.message(Command("maxsus_ovoz"))
 async def custom_voice_prompt(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID: return
-    await message.reply("✍️ **Ovozga aylantirib, kanalga tashlamoqchi bo'lgan matningizni yozib yuboring:**\n\n*(Bekor qilish uchun boshqa tugmani bosing)*", parse_mode="Markdown")
+    await message.reply("✍️ **Ovozga aylantirib, kanalga tashlamoqchi bo'lgan matningizni yozib yuboring:**\n\n*(Bekor qilish uchun Menu'dan boshqa narsa tanlang)*", parse_mode="Markdown")
     await state.set_state(AdminStates.waiting_for_voice_text)
 
 # ----- SAVOLLARGA JAVOB BERISH -----
@@ -177,7 +169,11 @@ async def main():
 
     # Telegram'ning pastki chap burchagidagi Menu tugmasini sozlash
     await bot.set_my_commands([
-        BotCommand(command="admin", description="👑 Boshqaruv paneli")
+        BotCommand(command="tonggi_post", description="🌅 Tonggi post yaratish"),
+        BotCommand(command="rahmatillo", description="😎 Rahmatillo uchun post"),
+        BotCommand(command="mirjalol", description="🤓 Mirjalol uchun post"),
+        BotCommand(command="abdullo", description="🧐 Abdullo uchun post"),
+        BotCommand(command="maxsus_ovoz", description="🎙 Maxsus ovozli xabar")
     ])
 
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
