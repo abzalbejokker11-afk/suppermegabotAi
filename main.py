@@ -34,35 +34,73 @@ async def generate_voice(text, filename="voice.ogg"):
         logging.error(f"Voice generation failed: {e}")
         return False
 
+# ----- FSM STATES -----
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+
+class AdminStates(StatesGroup):
+    waiting_for_voice_text = State()
+
 # ----- ADMIN PANEL -----
 ADMIN_ID = 90581324
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 @dp.message(Command("start"))
-async def start_cmd(message: Message):
+async def start_cmd(message: Message, state: FSMContext):
+    await state.clear()
     if message.from_user.id == ADMIN_ID:
         keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="👨‍💻 Admin Panel")]],
+            keyboard=[[KeyboardButton(text="🎛 Asosiy Boshqaruv")]],
             resize_keyboard=True
         )
         await message.reply("Assalomu alaykum, Xo'jayin! Bot ishga tayyor.", reply_markup=keyboard)
     else:
         await message.reply("Assalomu alaykum! Men kanaldagi aqlli yordamchiman.")
 
-@dp.message(F.text == "👨‍💻 Admin Panel")
+@dp.message(F.text == "🎛 Asosiy Boshqaruv")
 @dp.message(Command("admin"))
-async def admin_panel(message: Message):
+async def admin_panel(message: Message, state: FSMContext):
+    await state.clear()
     if message.from_user.id != ADMIN_ID:
-        await message.reply("Kechirasiz, sizda ushbu buyruqni ishlatish huquqi yo'q.")
+        await message.reply("Kechirasiz, sizda ruxsat yo'q.")
         return
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌅 Tonggi post (Live News)", callback_data="post_morning")],
-        [InlineKeyboardButton(text="😎 Rahmatillo uchun", callback_data="post_Rahmatillo")],
-        [InlineKeyboardButton(text="🤓 Mirjalol uchun", callback_data="post_Mirjalol")],
-        [InlineKeyboardButton(text="🧐 Abdullo uchun", callback_data="post_Abdullo")]
+        [InlineKeyboardButton(text="🌅 Tonggi IT Yangiliklar (Ovozli post)", callback_data="post_morning")],
+        [
+            InlineKeyboardButton(text="😎 Rahmatillo", callback_data="post_Rahmatillo"),
+            InlineKeyboardButton(text="🤓 Mirjalol", callback_data="post_Mirjalol"),
+            InlineKeyboardButton(text="🧐 Abdullo", callback_data="post_Abdullo")
+        ],
+        [InlineKeyboardButton(text="🎙 Maxsus o'z matnimni ovozli qilish", callback_data="custom_voice")]
     ])
-    await message.reply("Boshqaruv paneliga xush kelibsiz! Qaysi postni kanalga tashlaymiz?", reply_markup=keyboard)
+    await message.reply("👑 **Boshqaruv Paneli**\n\nQaysi operatsiyani bajaramiz?", parse_mode="Markdown", reply_markup=keyboard)
+
+@dp.callback_query(F.data == "custom_voice")
+async def custom_voice_prompt(callback: CallbackQuery, state: FSMContext):
+    if callback.from_user.id != ADMIN_ID: return
+    await callback.message.edit_text("✍️ **Ovozga aylantirib, kanalga tashlamoqchi bo'lgan matningizni yozib yuboring:**\n\n*(Bekor qilish uchun /start ni bosing)*", parse_mode="Markdown")
+    await state.set_state(AdminStates.waiting_for_voice_text)
+
+@dp.message(AdminStates.waiting_for_voice_text)
+async def process_custom_voice(message: Message, state: FSMContext):
+    if message.from_user.id != ADMIN_ID: return
+    await state.clear()
+    
+    wait_msg = await message.reply("⏳ Ovoz yaratilmoqda... Iltimos kuting.")
+    voice_filename = "custom_voice.ogg"
+    has_voice = await generate_voice(message.text, voice_filename)
+    
+    if has_voice and os.path.exists(voice_filename):
+        try:
+            voice_file = FSInputFile(voice_filename)
+            await bot.send_voice(chat_id=CHANNEL_ID, voice=voice_file, caption=f"🎙 Maxsus xabar:\n\n{message.text[:900]}")
+            os.remove(voice_filename)
+            await wait_msg.edit_text("✅ Ovozli xabar kanalingizga muvaffaqiyatli yuborildi!")
+        except Exception as e:
+            await wait_msg.edit_text(f"❌ Kanalga tashlashda xatolik: {e}")
+    else:
+        await wait_msg.edit_text("❌ Ovoz yaratishda xatolik yuz berdi.")
 
 @dp.callback_query(F.data.startswith("post_"))
 async def handle_admin_post(callback: CallbackQuery):
