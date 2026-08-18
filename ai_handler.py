@@ -68,25 +68,40 @@ import random
 def generate_person_post(person_name):
     traits = {
         "Mirjalol": [
+            "Shineray T30 va Shineray T50 haqida qiziqish, Labo'dan ko'ra nima uchun yaxshiroq va afzal ekanligini taqqoslash va Shinerayni maqtagan holda yozish.",
+            "Boshliqqa Shineray haqida hamma ma'lumotlarni o'rganib chiqib tushuntirishi va tez orada o'sha mashinaga erishish uchun kuchli motivatsiya.",
             "Mashina moyini almashtirish va motorga texnik xizmat ko'rsatish haqida o'ziga xos eslatma.",
             "Yo'l qoidalariga rioya qilish, radar va tezlikni oshirmaslik haqida hazilomuz maslahat.",
             "Mashinani doim top-toza tutish (moykaga tez-tez kirish) va chiroyli haydash haqida.",
             "Benzinni tejab haydash sirlari va moshina xarajatlarini kamaytirish haqida.",
-            "Mashinada yaxshi musiqa qo'yib, hayotdan zavqlanib haydash va yaxshi kayfiyat haqida motivatsiya."
+            "Mashinada yaxshi musiqa qo'yib, hayotdan zavqlanib haydash va yaxshi kayfiyat haqida motivatsiya.",
+            "Uzoq yo'lga haydashda ehtiyotkor bo'lish, xushyorlikni yo'qotmaslik va charchamaslik sirlari.",
+            "Kelajakda nafaqat Shineray, balki undan ham zo'r tijorat mashinalari olish niyati va rejalari haqida.",
+            "Rulda doim xushyor bo'lish va o'ziga ishonib haydash haqida hazil aralash daldalar."
         ],
         "Rahmatillo": [
+            "Claude yordamida 'Sotuv oynasi' (sayt) ni zo'r qilib yaratayotgani bilan uni maqtash va sayt yaratish ishlariga yanada qiziqtirish.",
+            "Kichik harakatlar ham katta yutuqqa olib borishi haqida aytib, Antigravity AI'ni ham ishlatib ko'rishni, Antigravity Claude'dan ham kuchliroq ekanini aytib maqtash.",
+            "Dasturlash, zamonaviy texnologiyalarga bo'lgan qiziqishi kelajakda uni kuchli mutaxassis qilishini aytib ruhlantirish.",
             "Tezroq uylanish kerakligi, qiz topish va uydagilarni xursand qilish haqida hazil.",
             "Yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverish kerakligi, asosiysi qizning qalb go'zalligi ekanligi haqida kulgili maslahat.",
             "Qizlarga yoqish uchun o'ziga qarab yurish, sport bilan shug'ullanish va zamonaviy kiyinish haqida.",
             "Kelajakdagi to'y xarajatlari uchun ko'proq ish ishlash, pul topish va tejash haqida motivatsiya.",
-            "Haqiqiy sevgi va munosabatlar psixologiyasi, o'z tengini topish qiyinligi haqida qisqa falsafiy post."
+            "Haqiqiy sevgi va munosabatlar psixologiyasi, o'z tengini topish qiyinligi haqida qisqa falsafiy post.",
+            "O'z ustida ishlash orqali IT sohasida va biznesda mustaqil shaxsga aylanish.",
+            "Shaxsiy rivojlanish, erinmasdan har kuni yangi narsa o'rganish va o'z qadrini bilish."
         ],
         "Abdullo": [
+            "Ishda shoshmasdan, o'ylab harakat qilish va tovarlarda umuman adashmaslik kerakligi, bu o'zini anglash va katta yutuqlar olib kelishi haqida.",
+            "Og'ir yuklarni ko'tarmaslik, kuch o'rniga aqlni ishlatish va o'z sog'lig'ini qattiq asrash haqida jiddiy maslahat.",
+            "Ota-onaga doim yaxshilik qilish, ularni qadrlash, hurmat qilish va duosini olish hayotdagi eng asosiy narsa ekanligi haqida.",
+            "Chekish, ichish kabi yomon illatlardan umuman yiroq bo'lish va faqat sog'lom hayot sari intilish zarurligi.",
             "Kitob o'qish, ilm olish va universitetga tayyorgarlik ko'rish eng muhim vazifasi ekanligi haqida qattiq motivatsiya.",
-            "Ijtimoiy tarmoqlar (Insta, TikTok) va o'yinlardan chalg'imasdan dars qilishga chaqiriq.",
+            "Ijtimoiy tarmoqlar (Insta, TikTok) va bekorchi o'yinlardan chalg'imasdan dars qilishga chaqiriq.",
             "Vaqtni to'g'ri taqsimlash va kelajakda kuchli mutaxassis bo'lish sirlari haqida.",
             "Imtihonlarga tayyorgarlik paytidagi dangasalikni yengish va miyani charxlash haqida maslahat.",
-            "Universitetdagi qiziqarli hayot va talabalikning oltin davri haqida ilhomlantiruvchi post."
+            "Universitetdagi qiziqarli hayot va talabalikning oltin davri haqida ilhomlantiruvchi post.",
+            "Sog'lom fikrlash, halol mehnat qilish va ertangi kunga ishonch bilan qadam tashlash."
         ]
     }
     
@@ -98,8 +113,8 @@ def generate_person_post(person_name):
     
     Bugun {person_name} uchun TANLANGAN MAVZU: "{selected_topic}"
     
-    Ushbu MAVZUDAN chiqmagan holatda, aynan shu narsa haqida qaratib unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv (hazil aralash) ohangda qisqa post yozib ber. 
-    Postni shaxsan unga qaratib yoz (masalan, "Qalay {person_name}", "Eshityapsanmi {person_name}" kabi). Mantiqli, hayotiy va kulgili bo'lsin. Juda cho'zib yuborma.
+    Ushbu MAVZUDAN umuman chiqmagan holatda, AYNAN SHU MAVZUNI ochib berib, unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv ohangda qisqa post yozib ber. Agar mavzuda hazil qilish so'ralgan bo'lsa - hazil qil, agar jiddiy maslahat so'ralgan bo'lsa - jiddiy gapir.
+    Postni shaxsan unga qaratib yoz (masalan, "Qalay {person_name}", "Eshityapsanmi {person_name}" kabi). Mantiqli, hayotiy va tasirchan bo'lsin. Juda cho'zib yuborma.
     """
     return call_gemini(prompt)
 
