@@ -63,21 +63,43 @@ def generate_morning_post():
     """
     return call_gemini(prompt)
 
+import random
+
 def generate_person_post(person_name):
     traits = {
-        "Mirjalol": "Moshina haydaydi. Unga doim mashina moyini vaqtida almashtirishni, mashinaga qarab yurishni eslat. Yaxshi haydovchi bo'lish bo'yicha maslahatlar ber va hazil qilib tur.",
-        "Rahmatillo": "Yoshi o'tib ketyapti, tezroq uylanishi kerak! Unga qiz topishga harakat qilishni, o'ziga qarab yurishni ayt. Hattoki hazillashib, yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverishini, asosiysi baxt ekanligini tushuntir.",
-        "Abdullo": "O'qishi kerak. Kitob o'qishga, kelajakka va o'qishga (universitetga) tayyorgarlik ko'rish eng muhim vazifasi ekanligini ta'kidla. Chalg'imasdan dars qilishini uqtir."
+        "Mirjalol": [
+            "Mashina moyini almashtirish va motorga texnik xizmat ko'rsatish haqida o'ziga xos eslatma.",
+            "Yo'l qoidalariga rioya qilish, radar va tezlikni oshirmaslik haqida hazilomuz maslahat.",
+            "Mashinani doim top-toza tutish (moykaga tez-tez kirish) va chiroyli haydash haqida.",
+            "Benzinni tejab haydash sirlari va moshina xarajatlarini kamaytirish haqida.",
+            "Mashinada yaxshi musiqa qo'yib, hayotdan zavqlanib haydash va yaxshi kayfiyat haqida motivatsiya."
+        ],
+        "Rahmatillo": [
+            "Tezroq uylanish kerakligi, qiz topish va uydagilarni xursand qilish haqida hazil.",
+            "Yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverish kerakligi, asosiysi qizning qalb go'zalligi ekanligi haqida kulgili maslahat.",
+            "Qizlarga yoqish uchun o'ziga qarab yurish, sport bilan shug'ullanish va zamonaviy kiyinish haqida.",
+            "Kelajakdagi to'y xarajatlari uchun ko'proq ish ishlash, pul topish va tejash haqida motivatsiya.",
+            "Haqiqiy sevgi va munosabatlar psixologiyasi, o'z tengini topish qiyinligi haqida qisqa falsafiy post."
+        ],
+        "Abdullo": [
+            "Kitob o'qish, ilm olish va universitetga tayyorgarlik ko'rish eng muhim vazifasi ekanligi haqida qattiq motivatsiya.",
+            "Ijtimoiy tarmoqlar (Insta, TikTok) va o'yinlardan chalg'imasdan dars qilishga chaqiriq.",
+            "Vaqtni to'g'ri taqsimlash va kelajakda kuchli mutaxassis bo'lish sirlari haqida.",
+            "Imtihonlarga tayyorgarlik paytidagi dangasalikni yengish va miyani charxlash haqida maslahat.",
+            "Universitetdagi qiziqarli hayot va talabalikning oltin davri haqida ilhomlantiruvchi post."
+        ]
     }
     
-    trait = traits.get(person_name, "Unga pozitiv motivatsiya ber.")
+    person_topics = traits.get(person_name, ["Unga ijobiy va pozitiv motivatsiya ber."])
+    selected_topic = random.choice(person_topics)
 
     prompt = f"""
     Sen juda aqlli, quvnoq va do'stona botsan. {person_name} ismli yigit uchun maxsus telegram post tayyorlashing kerak.
-    {person_name} haqida muhim ma'lumot: {trait}
     
-    Ushbu ma'lumotlarga asoslanib unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv (hazil aralash) ohangda qisqa post yozib ber. 
-    Postni shaxsan unga qaratib yoz. Mantiqli, hayotiy va kulgili bo'lsin. Juda cho'zib yuborma.
+    Bugun {person_name} uchun TANLANGAN MAVZU: "{selected_topic}"
+    
+    Ushbu MAVZUDAN chiqmagan holatda, aynan shu narsa haqida qaratib unga juda qiziqarli, o'zbek tilida, do'stona va pozitiv (hazil aralash) ohangda qisqa post yozib ber. 
+    Postni shaxsan unga qaratib yoz (masalan, "Qalay {person_name}", "Eshityapsanmi {person_name}" kabi). Mantiqli, hayotiy va kulgili bo'lsin. Juda cho'zib yuborma.
     """
     return call_gemini(prompt)
 
