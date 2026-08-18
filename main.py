@@ -237,8 +237,8 @@ async def main():
     ])
 
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
-    # Kun davomida 4 marta o'zi avtomatik tasodifiy yigitga post tashlaydi
-    for hour in [11, 15, 19, 21]:
+    # Sinov uchun har soatda (8:00 dan 22:00 gacha) avtomatik post tashlaydi
+    for hour in range(8, 23):
         scheduler.add_job(send_person_post, 'cron', hour=hour, minute=0)
 
     scheduler.start()
