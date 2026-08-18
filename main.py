@@ -204,14 +204,11 @@ async def send_morning_post():
     except Exception as e:
         logging.error(f"Tonggi post xatolik: {e}")
 
+import random
+
 async def send_person_post():
     try:
-        hour = datetime.now().hour
-        person = "Rahmatillo"
-        if hour % 3 == 1:
-            person = "Mirjalol"
-        elif hour % 3 == 2:
-            person = "Abdullo"
+        person = random.choice(["Rahmatillo", "Mirjalol", "Abdullo"])
 
         text = generate_person_post(person)
         voice_filename = "person.ogg"
@@ -240,7 +237,8 @@ async def main():
     ])
 
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
-    for hour in range(8, 23):
+    # Kun davomida 4 marta o'zi avtomatik tasodifiy yigitga post tashlaydi
+    for hour in [11, 15, 19, 21]:
         scheduler.add_job(send_person_post, 'cron', hour=hour, minute=0)
 
     scheduler.start()
