@@ -12,7 +12,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Google GenAI client yaratish
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL = "gemini-3.6-flash"
+MODEL = "gemini-flash-latest"
 
 def call_ai(prompt):
     if not GEMINI_API_KEY:
