@@ -12,24 +12,31 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Google GenAI client yaratish
 client = genai.Client(api_key=GEMINI_API_KEY)
-MODEL = "gemini-flash-latest"
+MODELS = ["gemini-flash-latest", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.6-flash"]
 
 def call_ai(prompt):
     if not GEMINI_API_KEY:
         return "Sun'iy intellekt API kaliti sozlanmagan!"
     
-    try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=prompt
-        )
-        return response.text
-    except Exception as e:
-        error_msg = str(e)
-        logging.error(f"Gemini API xatosi: {error_msg}")
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
-            return "Kechirasiz, Sun'iy Intellekt hozir juda ko'p so'rov qabul qildi (Google bepul limitiga tushib qoldik). Iltimos, 1 daqiqa kutib turing va qayta urinib ko'ring!"
-        return f"Kechirasiz, xatolik yuz berdi: {error_msg}"
+    last_error = None
+    for model_name in MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            return response.text
+        except Exception as e:
+            last_error = str(e)
+            logging.error(f"Gemini API xatosi ({model_name}): {last_error}")
+            continue
+
+    if "429" in last_error or "RESOURCE_EXHAUSTED" in last_error:
+        return "Kechirasiz, Sun'iy Intellekt hozir juda ko'p so'rov qabul qildi (Google bepul limitiga tushib qoldik). Iltimos, bir oz kutib turing va qayta urinib ko'ring!"
+    elif "503" in last_error or "UNAVAILABLE" in last_error:
+        return "Kechirasiz, Google serverlari hozir haddan tashqari band. Iltimos, 5-10 daqiqadan so'ng qayta urinib ko'ring!"
+        
+    return f"Kechirasiz, xatolik yuz berdi: {last_error}"
 
 def answer_question(question):
     prompt = f"Foydalanuvchi quyidagi savolni berdi:\n\"{question}\"\nUnga o'zbek tilida, do'stona, to'g'ri va yordam beruvchi ohangda qisqa javob yoz. Yodda tut, hech qanday yulduzchalar va raqamlarni ishlatma, ovozli o'qish uchun mosla."
