@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, URLInputFile
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
@@ -73,8 +73,9 @@ async def handle_command_post(message: Message):
     try:
         if action == "morning":
             text = generate_morning_post()
+            image_url = None
         else:
-            text = generate_person_post(action)
+            text, image_url = generate_person_post(action)
     except Exception as e:
         await wait_msg.edit_text(f"❌ AI xatosi: {str(e)}")
         return
@@ -87,7 +88,13 @@ async def handle_command_post(message: Message):
     has_voice = await generate_voice(text, voice_filename)
 
     try:
-        sent_msg = await bot.send_message(chat_id=CHANNEL_ID, text=text)
+        if image_url:
+            # Rasmni yuborish
+            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
+            # Rasmning pastidan matnni yuborish
+            sent_msg = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
+        else:
+            sent_msg = await bot.send_message(chat_id=CHANNEL_ID, text=text)
 
         if has_voice and os.path.exists(voice_filename):
             voice_file = FSInputFile(voice_filename)
@@ -178,10 +185,8 @@ async def handle_questions(message: Message):
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == bot_me.id
     is_mentioned = bot_me.username and f"@{bot_me.username}" in text
 
-    # Agar u shaxsiy chat bo'lsa, YOKI ichida so'roq belgisi bo'lsa, YOKI unga reply qilingan bo'lsa
     if message.chat.type == 'private' or "?" in text or is_reply_to_bot or is_mentioned:
         try:
-            # Kanalda chat action yuborish ba'zan xato berishi mumkin, shuning uchun try/except
             try:
                 await bot.send_chat_action(chat_id=message.chat.id, action="typing")
             except Exception:
@@ -204,16 +209,22 @@ async def send_morning_post():
     except Exception as e:
         logging.error(f"Tonggi post xatolik: {e}")
 
-import random
-
-async def send_person_post():
-    try:
+async def send_person_post(person=None):
+    import random
+    if not person:
         person = random.choice(["Rahmatillo", "Mirjalol", "Abdullo"])
 
-        text = generate_person_post(person)
-        voice_filename = "person.ogg"
+    try:
+        text, image_url = generate_person_post(person)
+        voice_filename = f"person_{person}.ogg"
         has_voice = await generate_voice(text, voice_filename)
-        sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
+        
+        if image_url:
+            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
+            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
+        else:
+            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
+            
         if has_voice and os.path.exists(voice_filename):
             await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), reply_to_message_id=sent.message_id)
             os.remove(voice_filename)
@@ -236,10 +247,16 @@ async def main():
         BotCommand(command="eslatma", description="⏰ Aniq vaqtli eslatma qo'shish")
     ])
 
+    # 1. Ertalab soat 7:00 da tonggi post
     scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
-    # Sinov uchun har soatda (8:00 dan 22:00 gacha) avtomatik post tashlaydi
-    for hour in range(8, 23):
-        scheduler.add_job(send_person_post, 'cron', hour=hour, minute=0)
+    
+    # 2. Har bir bola uchun faqat belgilangan vaqtda bitta post (Jami 3 ta post)
+    # Mirjalolga - 13:00 (1 da)
+    scheduler.add_job(send_person_post, 'cron', hour=13, minute=0, args=["Mirjalol"])
+    # Rahmatilloga - 14:00 (2 da)
+    scheduler.add_job(send_person_post, 'cron', hour=14, minute=0, args=["Rahmatillo"])
+    # Abdulloga - 15:00 (3 da)
+    scheduler.add_job(send_person_post, 'cron', hour=15, minute=0, args=["Abdullo"])
 
     scheduler.start()
     logging.info("Bot ishga tushdi!")

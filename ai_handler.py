@@ -3,6 +3,7 @@ import logging
 import requests
 import random
 import datetime
+import urllib.parse
 from dotenv import load_dotenv
 from google import genai
 
@@ -91,7 +92,7 @@ def generate_person_post(person_name):
             "Sun'iy intellekt (AI) bilan har kuni shug'ullanish kerakligi. Shunday degin: 'Men ham oldin sun'iy intellekt nimaligini bilmas edim, lekin har kuni kodim ko'payib rivojlanyapman, sen ham rivojlan, bitta qadam qo'y' deb kuchli motivatsiya usulida post yozish.",
             "Kichik harakatlar ham katta yutuqqa olib borishi haqida aytib, Antigravity sun'iy intellektini ham ishlatib ko'rishni, Antigravity Claude dan ham kuchliroq ekanini aytib maqtash.",
             "Claude yordamida 'Sotuv oynasi' saytini zo'r qilib yaratayotgani bilan uni maqtash va sayt yaratish ishlariga yanada qiziqtirish.",
-            "Dasturlash, zamonaviy texnologiyalarga bo'lgan qiziqishi kelajakda uni kuchli mutaxassis qilishini aytib ruhlantirish.",
+            "Dasturlash, zamonaviy texnergiyalarga bo'lgan qiziqishi kelajakda uni kuchli mutaxassis qilishini aytib ruhlantirish.",
             "Tezroq uylanish kerakligi, qiz topish va uydagilarni xursand qilish haqida hazil.",
             "Yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverish kerakligi, asosiysi qizning qalb go'zalligi ekanligi haqida kulgili maslahat.",
             "Qizlarga yoqish uchun o'ziga qarab yurish, sport bilan shug'ullanish va zamonaviy kiyinish haqida.",
@@ -122,9 +123,31 @@ def generate_person_post(person_name):
     
     Ushbu mavzuni to'liq ochib berib, uni harakatga keltiradigan, ish faoliyatini oshirishga qaratilgan kuchli motivatsion matn yoz.
     Postni shaxsan unga qaratib yoz (masalan, "Eshityapsanmi {person_name}"). Mantiqli, hayotiy va ta'sirchan bo'lsin.
-    ENG MUHIM QOIDA: Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni va inglizcha so'zlarni hamisha o'qilishi bo'yicha harflar bilan yoz. Matnni go'zal ovozli diktor qiz o'qib beradi, shuning uchun juda ravon, kitobiy va toza o'zbek tilida yozilishi shart.
+    
+    MUHIM QOIDALAR:
+    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "A young programmer coding on a laptop, highly detailed cinematic lighting"). Faqat promptning o'zini yoz, hech qanday qo'shimcha so'z qo'shma.
+    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATNNI YOZ!
+    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni va inglizcha so'zlarni hamisha o'qilishi bo'yicha harflar bilan yoz. Matnni go'zal ovozli diktor qiz o'qib beradi, shuning uchun juda ravon va toza o'zbek tilida bo'lsin.
     """
-    return call_ai(prompt)
+    
+    full_response = call_ai(prompt)
+    
+    if "xatolik yuz berdi" in full_response.lower() or "limit" in full_response.lower():
+        return full_response, None
+        
+    lines = full_response.split('\n', 1)
+    if len(lines) >= 2:
+        image_prompt = lines[0].strip()
+        text_content = lines[1].strip()
+    else:
+        # Xavfsizlik uchun, agar promptni ajrata olmasa
+        image_prompt = "A motivational scene for a young boy, highly detailed"
+        text_content = full_response
+        
+    # image_prompt'dan xavfsiz URL yaratish
+    image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(image_prompt)}"
+    
+    return text_content, image_url
 
 def parse_reminder(text):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
