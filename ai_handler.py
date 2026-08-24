@@ -161,3 +161,30 @@ def parse_reminder(text):
     Agar vaqtni mutlaqo tushunmasang, faqatgina "XATO" deb yoz.
     """
     return call_ai(prompt).strip()
+def generate_antidoping_post():
+    prompt = """
+    Sen sportchilar, yoshlar va barchani to'g'ri yo'lga boshlaydigan motivator-ekspertsan.
+    Sening vazifang - ANTI-DOPING (Dopingga qarshi) mavzusida juda kuchli, ta'sirchan va halol sport, halol mehnat haqida telegram post yozish.
+    Odamlarni sun'iy vositalardan qochib, o'zining tabiiy kuchiga ishonishiga undashing kerak.
+
+    MUHIM QOIDALAR:
+    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "A strong muscular athlete refusing a chemical syringe, standing in a stadium, dramatic cinematic lighting"). Faqat promptning o'zini yoz.
+    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATNNI YOZ!
+    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni so'z bilan yoz. Ovozli diktor qiz o'qib beradi, matn juda ravon va toza o'zbek tilida bo'lsin.
+    """
+    
+    full_response = call_ai(prompt)
+    if "xatolik yuz berdi" in full_response.lower() or "limit" in full_response.lower():
+        return full_response, None
+        
+    lines = full_response.split('\n', 1)
+    if len(lines) >= 2:
+        image_prompt = lines[0].strip()
+        text_content = lines[1].strip()
+    else:
+        image_prompt = "A motivational anti-doping sports poster, cinematic"
+        text_content = full_response
+        
+    image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(image_prompt)}"
+    return text_content, image_url
+

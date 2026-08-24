@@ -8,7 +8,7 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyb
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
-from ai_handler import answer_question, generate_morning_post, generate_person_post, parse_reminder
+from ai_handler import answer_question, generate_morning_post, generate_person_post, parse_reminder, generate_antidoping_post
 from keep_alive import keep_alive
 import edge_tts
 
@@ -54,6 +54,7 @@ async def start_cmd(message: Message, state: FSMContext):
 @dp.message(Command("rahmatillo"))
 @dp.message(Command("mirjalol"))
 @dp.message(Command("abdullo"))
+@dp.message(Command("antidoping"))
 async def handle_command_post(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
@@ -63,7 +64,8 @@ async def handle_command_post(message: Message):
         "tonggi_post": "morning",
         "rahmatillo": "Rahmatillo",
         "mirjalol": "Mirjalol",
-        "abdullo": "Abdullo"
+        "abdullo": "Abdullo",
+        "antidoping": "antidoping"
     }
     action = action_map.get(cmd)
     if not action: return
@@ -74,6 +76,8 @@ async def handle_command_post(message: Message):
         if action == "morning":
             text = generate_morning_post()
             image_url = None
+        elif action == "antidoping":
+            text, image_url = generate_antidoping_post()
         else:
             text, image_url = generate_person_post(action)
     except Exception as e:
@@ -231,6 +235,24 @@ async def send_person_post(person=None):
     except Exception as e:
         logging.error(f"Shaxsiy post xatolik: {e}")
 
+async def send_antidoping_post():
+    try:
+        text, image_url = generate_antidoping_post()
+        voice_filename = "antidoping.ogg"
+        has_voice = await generate_voice(text, voice_filename)
+        
+        if image_url:
+            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
+            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
+        else:
+            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
+            
+        if has_voice and os.path.exists(voice_filename):
+            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), reply_to_message_id=sent.message_id)
+            os.remove(voice_filename)
+    except Exception as e:
+        logging.error(f"Anti-doping post xatolik: {e}")
+
 from aiogram.types import BotCommand
 
 async def main():
@@ -244,7 +266,8 @@ async def main():
         BotCommand(command="mirjalol", description="🤓 Mirjalol uchun post"),
         BotCommand(command="abdullo", description="🧐 Abdullo uchun post"),
         BotCommand(command="maxsus_ovoz", description="🎙 Maxsus ovozli xabar"),
-        BotCommand(command="eslatma", description="⏰ Aniq vaqtli eslatma qo'shish")
+        BotCommand(command="eslatma", description="⏰ Aniq vaqtli eslatma qo'shish"),
+        BotCommand(command="antidoping", description="🏋️ Anti-doping post")
     ])
 
     # 1. Ertalab soat 7:00 da tonggi post
@@ -257,6 +280,9 @@ async def main():
     scheduler.add_job(send_person_post, 'cron', hour=14, minute=0, args=["Rahmatillo"])
     # Abdulloga - 15:00 (3 da)
     scheduler.add_job(send_person_post, 'cron', hour=15, minute=0, args=["Abdullo"])
+
+    # 3. Anti-doping post - Har 2 soatda tashlash (Masalan: 8:30, 10:30, 12:30...)
+    scheduler.add_job(send_antidoping_post, 'cron', hour='8-22/2', minute=30)
 
     scheduler.start()
     logging.info("Bot ishga tushdi!")
