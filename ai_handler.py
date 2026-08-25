@@ -145,12 +145,27 @@ va ruhlantiruvchi tonggi post yoz. Uzunligi uch to'rt abzats.
 def generate_person_post(person_name: str):
     bank = topics.PERSON_TRAITS.get(person_name, ["Unga ijobiy motivatsiya ber"])
     topic = topics.pick(f"person_{person_name}", bank)
+    
+    styles = [
+        "1. Qattiq va jiddiy akalik maslahati uslubi: O'ta realistik, yoshlikni bekorga o'tkazmaslik haqida dakki va qattiq motivatsiya.",
+        "2. Falsafiy va o'ylantiradigan uslub: Hayotiy voqealar, xatolar va ulardan olinadigan darslar orqali chuqur ma'noli yondashuv.",
+        "3. Suhbat va savol-javob uslubi: Go'yoki u bilan yuzma-yuz o'tirib choy ichib gaplashayotgandek, savollar berib yozish.",
+        "4. Kichik hikoya uslubi: Uning bugungi mavzusi doirasida boshqalar qilgan xatolik haqida qisqa hikoya va undan xulosa.",
+        "5. Aniq fakt va harakatlar rejasi uslubi: 'Bugun nima qilishing kerak?' degan savolga 3 ta aniq amaliy va kuchli qadam orqali yozish."
+    ]
+    style = random.choice(styles)
 
     prompt = f"""Sen {person_name} ismli yigit uchun shaxsiy telegram post yozyapsan.
 Bugungi mavzu: "{topic}"
 
-Mavzuni to'liq ochib ber, hayotiy misollar keltir, uni harakatga undaydigan kuchli
-va samimiy matn yoz. Postni bevosita unga qaratib yoz. Uzunligi uch to'rt abzats.
+BUGUNGI YOZISH USLUBING VA STRUKTURANG:
+{style}
+
+TALABLAR:
+- Har kungi postlaring bir xil zerikarli qolipda bo'lmasin. Shuning uchun bugun aynan yuqoridagi uslubni qo'lla.
+- Mavzuni to'liq ochib ber, hayotiy misollar keltir, uni harakatga undaydigan kuchli va samimiy matn yoz.
+- Ovozli bot o'qishi uchun maxsus belgilar (*, #, _, emoji) ishlatma!
+- Uzunligi uch to'rt abzats.
 
 BIRINCHI QATORGA: shu mavzuga mos, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA
 qisqa prompt yoz (faqat promptning o'zi).
@@ -172,30 +187,29 @@ IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATN.
 # ---------------------------------------------------------------- 4. ANTIDOPING (asosiy)
 def generate_antidoping_post():
     topic = topics.pick("antidoping", topics.ANTIDOPING)
+    
+    styles = [
+        "1. Ilmiy-akademik tahlil: Muammo qo'yilishi, biokimyoviy mexanizm, analitik metodika, amaliy xulosa. Jiddiy va sof ilmiy ohangda yoz.",
+        "2. Mifni fosh qilish (Mythbusting): Sportchilar orasida shu mavzudagi keng tarqalgan noto'g'ri tushunchani ol va uni faktlar va chuqur tibbiy dalillar bilan chilparchin qil.",
+        "3. Qo'rqinchli haqiqat va tibbiy asoratlar: Asosiy urg'uni tanadagi o'zgarishlar, jigar/yurak kabi organlarning aynan hujayra darajasida qanday halokatga yuz tutishiga qarat.",
+        "4. Laboratoriya nigohi (Detektiv): Ushbu moddani tekshiradigan zamonaviy antidoping texnologiyalari qanchalik daxshatli darajada sezgir ekanligi (pikogramm aniqlik, yillar davomida tutilishi) nuqtai nazaridan yoz.",
+        "5. O'qituvchi-Ekspert nasihati: Ko'proq maslahat ruhida, lekin faqat quruq gap emas, ilmiy tushunchalarni oddiy, ta'sirchan misollar (metabolizm, DNK) bilan yoshlarga yetkazib yoz."
+    ]
+    style = random.choice(styles)
 
     prompt = f"""Sen sport tibbiyoti va antidoping sohasidagi ilmiy tadqiqotchisan.
 Telegram kanali uchun CHUQUR ILMIY, ishonchli va batafsil post yozyapsan.
 
 BUGUNGI ILMIY MAVZU: "{topic}"
 
-Postning ilmiy tuzilishi (sarlavhalarsiz, oqar matn shaklida, lekin shu ketma-ketlikda):
-1. Muammoning qo'yilishi — bu masala nima uchun sport tibbiyotida dolzarb.
-2. Fiziologik va biokimyoviy mexanizm — organizmda aynan nima sodir bo'ladi:
-   qaysi hujayra, qaysi ferment, qaysi retseptor, qaysi metabolik yo'l.
-3. Analitik yoki tibbiy metodika — qanday o'lchanadi, aniqlanadi yoki baholanadi,
-   qanday sezgirlik va aniqlik darajasida.
-4. Ilmiy dalillar — Butunjahon antidoping agentligi standartlari, xalqaro
-   laboratoriya amaliyoti va tadqiqot natijalariga tayangan aniq faktlar.
-5. Sog'liq uchun oqibatlar — qisqa va uzoq muddatli asoratlar, aniq organ tizimlari bo'yicha.
-6. Amaliy xulosa — sportchi va murabbiy uchun aniq, bajarilishi mumkin bo'lgan tavsiyalar.
+BUGUNGI YOZISH USLUBING VA STRUKTURANG:
+{style}
 
 TALABLAR:
+- Har bir post bir-biriga umuman o'xshamasligi, monoton bo'lmasligi shart.
 - Matn KAMIDA olti yetti abzats va {config.MIN_SCIENCE_CHARS} belgidan uzun bo'lsin.
-- Quruq motivatsiya YOZMA. Faqat ilmiy mazmun, aniq atamalar va faktlar.
-- Har bir atamani keltirganda uni bir jumlada sodda tushuntirib ket.
 - O'ylab topilgan raqam, soxta statistika yoki mavjud bo'lmagan tadqiqotga havola keltirma.
-  Aniq bilmasang, umumlashtirib yoz.
-- Oxirida bir abzats toza sport g'oyasiga bag'ishlansin.
+- Ovozli bot o'qishi uchun maxsus belgilar (*, #, _, emoji) ishlatma!
 
 BIRINCHI QATORGA: shu mavzuga mos, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA
 qisqa prompt yoz (masalan: "modern anti-doping laboratory, mass spectrometer,
