@@ -72,10 +72,10 @@ GEMINI_MODELS = [
 OPENROUTER_MODELS = [
     m.strip() for m in os.getenv(
         "OPENROUTER_MODELS",
-        "meta-llama/llama-3.3-70b-instruct:free,"
+        "meta-llama/llama-3.3-70b-instruct,"
         "google/gemini-2.0-flash-exp:free,"
-        "deepseek/deepseek-chat-v3-0324:free,"
-        "qwen/qwen-2.5-72b-instruct:free"
+        "deepseek/deepseek-chat,"
+        "qwen/qwen-2.5-72b-instruct"
     ).split(",") if m.strip()
 ]
 
