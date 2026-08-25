@@ -72,8 +72,8 @@ GEMINI_MODELS = [
 OPENROUTER_MODELS = [
     m.strip() for m in os.getenv(
         "OPENROUTER_MODELS",
+        "anthropic/claude-sonnet-5,"
         "meta-llama/llama-3.3-70b-instruct,"
-        "google/gemini-2.0-flash-exp:free,"
         "deepseek/deepseek-chat,"
         "qwen/qwen-2.5-72b-instruct"
     ).split(",") if m.strip()
