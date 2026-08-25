@@ -169,15 +169,34 @@ def parse_reminder(text):
     """
     return call_ai(prompt).strip()
 def generate_antidoping_post():
-    prompt = """
-    Sen sportchilar, yoshlar va barchani to'g'ri yo'lga boshlaydigan motivator-ekspertsan.
-    Sening vazifang - ANTI-DOPING (Dopingga qarshi) mavzusida juda kuchli, ta'sirchan va halol sport, halol mehnat haqida telegram post yozish.
-    Odamlarni sun'iy vositalardan qochib, o'zining tabiiy kuchiga ishonishiga undashing kerak.
-
+    doping_topics = [
+        "Antidoping nazorati laboratoriyalarida qo'llaniladigan yuqori samarali suyuqlik xromatografiyasi va mass spektrometriya texnologiyalari. (Pikogramm aniqlik, metabolitlar)",
+        "Sportchining biologik pasporti tizimi (ABP) qanday ishlaydi? Qon va siydik tahlillaridagi uzoq muddatli g'ayritabiiy tebranishlar fosh etilishi.",
+        "Qat'iy javobgarlik prinsipi (Butunjahon antidoping kodeksi) - nima uchun sportchi o'z vujudiga tushgan har bir modda uchun javobgar?",
+        "Anabolik steroidlarning inson endokrin (gormonal) tizimiga ko'rinmas, ammo uzoq muddatli halokatli zararlari va oqibatlari.",
+        "Qon dopingi (Eritropoetin, EPO) jarayoni sirlari, uning yurak-qon tomir tizimiga xavfi va qonning quyuqlashishi oqibatida kelib chiqadigan xatarlar.",
+        "Oziq-ovqat qo'shimchalari (BAA) ichida yashiringan xavf: nima uchun oddiy protein yoki vitamin tarkibida taqiqlangan moddalar bo'lishi mumkin?",
+        "Gen dopingi - sportning biokimyoviy olamidagi eng yangi tahdid va uni aniqlashda o'rganilayotgan ilg'or molekulyar biologiya usullari.",
+        "Diuretiklar va niqoblovchi moddalar (peshob haydovchi dorilar) nima uchun qat'iyan man etilgan va laboratoriya ularni qanday fosh etadi?",
+        "TUE (Terapevtik istisnolar) - kasal sportchilarga dori qabul qilishga ruxsat berishdagi xalqaro standartlar va qat'iy tibbiy shartlar.",
+        "Psixostimulyatorlar va narkotik moddalarning markaziy asab tizimiga vaqtincha ta'siri hamda poygadan keyingi mudhish psixologik depressiya holatlari."
+    ]
+    
+    selected_topic = random.choice(doping_topics)
+    
+    prompt = f"""
+    Sen yuqori toifali, ilmiy izlanuvchi va sport tibbiyoti bo'yicha ekspert-motivatorsan.
+    Sening vazifang - ANTI-DOPING mavzusida juda chuqur ilmiy, dolzarb, lekin hamma tushunadigan tilda o'ta batafsil va ta'sirli telegram post yozish.
+    
+    Bugungi TANLANGAN ILMIY MAVZU: "{selected_topic}"
+    
+    Matn qisqa bo'lmasin. Mavzuni ilmiy jihatdan keng yoritib ber. Xuddi zamonaviy tibbiy maqola va ilmiy-ommabop ruhda yoz.
+    (Misol uchun: metabolizm yo'llari, pikogramm sezgirlik, qon tarkibidagi o'zgarishlar va hokazolarni tilga olib, oxirida toza sportga unda).
+    
     MUHIM QOIDALAR:
-    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "A strong muscular athlete refusing a chemical syringe, standing in a stadium, dramatic cinematic lighting"). Faqat promptning o'zini yoz.
-    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATNNI YOZ!
-    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni so'z bilan yoz. Ovozli diktor qiz o'qib beradi, matn juda ravon va toza o'zbek tilida bo'lsin.
+    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "High tech medical laboratory analyzing a blood sample with blue cinematic lighting"). Faqat promptning o'zini yoz.
+    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY-BATAFSIL MATNNI YOZ!
+    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni (masalan 10, 100) so'z bilan (o'n, yuz) yoz. Ovozli diktor qiz o'qib beradi, matn juda ravon va toza o'zbek tilida bo'lsin.
     """
     
     full_response = call_ai(prompt)
@@ -189,7 +208,7 @@ def generate_antidoping_post():
         image_prompt = lines[0].strip()
         text_content = lines[1].strip()
     else:
-        image_prompt = "A motivational anti-doping sports poster, cinematic"
+        image_prompt = "A high-tech anti-doping laboratory, highly detailed, cinematic"
         text_content = full_response
         
     image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(image_prompt)}"
