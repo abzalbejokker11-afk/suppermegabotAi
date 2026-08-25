@@ -1,295 +1,357 @@
+"""
+SuperAgentBot — mustaqil, tinim bilmaydigan Telegram post agenti.
+Ishga tushirish:  python main.py
+"""
 import asyncio
 import logging
 import os
+import random
+import sys
+import time
 from datetime import datetime
-from aiogram import Bot, Dispatcher, F
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, URLInputFile
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from dotenv import load_dotenv
-
-from ai_handler import answer_question, generate_morning_post, generate_person_post, parse_reminder, generate_antidoping_post
-from keep_alive import keep_alive
-import edge_tts
-
-load_dotenv()
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-_raw_channel = os.getenv("CHANNEL_ID", "")
-if _raw_channel and not _raw_channel.startswith("-"):
-    CHANNEL_ID = f"-100{_raw_channel}"
-else:
-    CHANNEL_ID = _raw_channel
-
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-scheduler = AsyncIOScheduler(timezone='Asia/Tashkent')
-
-async def generate_voice(text, filename="voice.ogg"):
-    try:
-        communicate = edge_tts.Communicate(text, "uz-UZ-MadinaNeural")
-        await communicate.save(filename)
-        return True
-    except Exception as e:
-        logging.error(f"Voice generation failed: {e}")
-        return False
-
-# ----- FSM STATES -----
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import BotCommand, Message
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
+import ai_engine
+import config
+import topics
+from ai_handler import (answer_question, generate_antidoping_post,
+                        generate_morning_post, generate_person_post, parse_reminder)
+from keep_alive import STATUS, keep_alive
+from publisher import publish, generate_voice
+from textutils import clean_for_channel
+
+# ---------------------------------------------------------------- logging
+os.makedirs(config.STATE_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-7s | %(name)-10s | %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout),
+              logging.FileHandler(os.path.join(config.STATE_DIR, "bot.log"), encoding="utf-8")],
+)
+log = logging.getLogger("main")
+
+bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=None))
+dp = Dispatcher()
+
+# Eslatmalar qayta ishga tushgandan keyin ham saqlanadi
+scheduler = AsyncIOScheduler(
+    timezone=config.TIMEZONE,
+    jobstores={"default": SQLAlchemyJobStore(
+        url=f"sqlite:///{os.path.join(config.STATE_DIR, 'jobs.sqlite')}")},
+    job_defaults={"coalesce": True, "misfire_grace_time": 1800, "max_instances": 1},
+)
+
+
+def is_admin(message: Message) -> bool:
+    return message.from_user and message.from_user.id in config.ADMIN_IDS
+
+
+# ================================================================ VAZIFA HIMOYASI
+async def guarded(name: str, coro_fn, retries: int = 3):
+    """Rejalashtirilgan vazifani hech qachon yiqilmaydigan qilib o'raydi."""
+    for i in range(retries):
+        try:
+            await coro_fn()
+            return True
+        except Exception as e:
+            STATUS["errors"] += 1
+            log.exception("Vazifa xatosi [%s] urinish %d: %s", name, i + 1, e)
+            await asyncio.sleep(60 * (i + 1))
+    log.error("Vazifa butunlay bajarilmadi: %s", name)
+    try:
+        for admin in config.ADMIN_IDS:
+            await bot.send_message(admin, f"Diqqat: '{name}' vazifasi bajarilmadi. Loglarni tekshiring.")
+    except Exception:
+        pass
+    return False
+
+
+# ================================================================ POST ISHLAB CHIQARISH
+async def do_morning():
+    text = await asyncio.to_thread(generate_morning_post)
+    await publish(bot, text, None, with_voice=True)
+
+
+async def do_person(person=None):
+    person = person or random.choice(list(topics.PERSON_TRAITS.keys()))
+    text, img = await asyncio.to_thread(generate_person_post, person)
+    await publish(bot, text, img, with_voice=True)
+
+
+async def do_antidoping():
+    text, img = await asyncio.to_thread(generate_antidoping_post)
+    await publish(bot, text, img, with_voice=True)
+
+
+# Rejalashtirilgan chaqiruvlar (APScheduler ular uchun modul darajasidagi nom talab qiladi)
+async def job_morning():
+    await guarded("tonggi post", do_morning)
+
+
+async def job_person(person=None):
+    await guarded(f"shaxsiy post {person}", lambda: do_person(person))
+
+
+async def job_antidoping():
+    await guarded("antidoping post", do_antidoping)
+
+
+# ================================================================ FSM
 class AdminStates(StatesGroup):
     waiting_for_voice_text = State()
     waiting_for_reminder = State()
 
-# ----- ADMIN PANEL -----
-ADMIN_ID = 90581324
+
+# ================================================================ BUYRUQLAR
 @dp.message(Command("start"))
 async def start_cmd(message: Message, state: FSMContext):
     await state.clear()
-    await message.reply("Assalomu alaykum! Pastki chap burchakdagi **Menu** tugmasini bosing va o'zingizga kerakli post turini tanlang. Men zudlik bilan ishga tushaman!", parse_mode="Markdown")
+    if not is_admin(message):
+        await message.reply("Assalomu alaykum! Savolingizni yozing, javob beraman.")
+        return
+    await message.reply(
+        "Assalomu alaykum!\n\n"
+        "Pastdagi Menu tugmasidan kerakli post turini tanlang.\n"
+        "/holat — botning va sun'iy intellekt modellarining hozirgi ahvoli\n"
+        "/antidoping — chuqur ilmiy antidoping post"
+    )
 
-# ----- POST YARATISH BUYRUQLARI -----
+
+@dp.message(Command("holat"))
+async def status_cmd(message: Message):
+    if not is_admin(message):
+        return
+    s = ai_engine.stats()
+    used, total = topics.progress("antidoping", topics.ANTIDOPING)
+    lines = [
+        f"Ish vaqti: {int((time.time() - STATUS['started']) // 60)} daqiqa",
+        f"Joylangan postlar: {STATUS['posts']}   Xatolar: {STATUS['errors']}",
+        f"Oxirgi post: {STATUS['last_post'] or 'hali yo`q'}",
+        f"AI chaqiruvlar: {s['calls']}, muvaffaqiyat: {s['ok']}, yiqilish: {s['fail']}, "
+        f"oflayn rejim: {s['offline']}",
+        f"Antidoping mavzulari: {used} / {total} ishlatilgan",
+        "",
+        "Modellar:",
+    ]
+    for tag, keys, state in ai_engine.health():
+        lines.append(f"  {tag} ({keys} kalit) — {state}")
+    await message.reply("\n".join(lines)[:4000])
+
+
 @dp.message(Command("tonggi_post"))
 @dp.message(Command("rahmatillo"))
 @dp.message(Command("mirjalol"))
 @dp.message(Command("abdullo"))
 @dp.message(Command("antidoping"))
-async def handle_command_post(message: Message):
-    if message.from_user.id != ADMIN_ID:
+async def handle_command_post(message: Message, state: FSMContext):
+    if not is_admin(message):
         return
+    await state.clear()
 
-    cmd = message.text.replace("/", "").split()[0].lower()
-    action_map = {
-        "tonggi_post": "morning",
-        "rahmatillo": "Rahmatillo",
-        "mirjalol": "Mirjalol",
-        "abdullo": "Abdullo",
-        "antidoping": "antidoping"
-    }
-    action = action_map.get(cmd)
-    if not action: return
-
-    wait_msg = await message.reply("⏳ Kanalga tayyorlanmoqda (10 soniya)... Iltimos kuting.")
+    cmd = message.text.lstrip("/").split()[0].split("@")[0].lower()
+    wait = await message.reply("Post tayyorlanmoqda... Bu bir necha daqiqa olishi mumkin.")
 
     try:
-        if action == "morning":
-            text = generate_morning_post()
-            image_url = None
-        elif action == "antidoping":
-            text, image_url = generate_antidoping_post()
+        if cmd == "tonggi_post":
+            text, img = await asyncio.to_thread(generate_morning_post), None
+        elif cmd == "antidoping":
+            text, img = await asyncio.to_thread(generate_antidoping_post)
         else:
-            text, image_url = generate_person_post(action)
+            person = cmd.capitalize()
+            text, img = await asyncio.to_thread(generate_person_post, person)
     except Exception as e:
-        await wait_msg.edit_text(f"❌ AI xatosi: {str(e)}")
+        log.exception("Post yaratishda xato")
+        await wait.edit_text(f"Post yaratishda xatolik: {e}")
         return
 
-    if not text or "xatolik" in text.lower():
-        await wait_msg.edit_text(f"❌ Xatolik yuz berdi: {text}")
+    if not text or len(text.strip()) < 40:
+        await wait.edit_text("Matn juda qisqa chiqdi. Qayta urinib ko'ring.")
         return
 
-    voice_filename = f"temp_voice_{action}.ogg"
-    has_voice = await generate_voice(text, voice_filename)
+    await wait.edit_text(f"Matn tayyor ({len(text)} belgi). Kanalga joylanmoqda...")
+    ok, msg = await publish(bot, text, img, with_voice=True)
+    await wait.edit_text(("Tayyor! " if ok else "Xatolik: ") + msg + f"\n\n{text[:300]}...")
 
-    try:
-        if image_url:
-            # Rasmni yuborish
-            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
-            # Rasmning pastidan matnni yuborish
-            sent_msg = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
-        else:
-            sent_msg = await bot.send_message(chat_id=CHANNEL_ID, text=text)
 
-        if has_voice and os.path.exists(voice_filename):
-            voice_file = FSInputFile(voice_filename)
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=voice_file, reply_to_message_id=sent_msg.message_id)
-            os.remove(voice_filename)
-
-        await wait_msg.edit_text(f"✅ Muvaffaqiyatli kanalga tashlandi!\n\n{text[:200]}...")
-    except Exception as e:
-        await wait_msg.edit_text(f"❌ Kanalga tashlashda xatolik!\nXato: {str(e)}")
-
-# ----- MAXSUS OVOZ YARATISH -----
+# ---------------------------------------------------------------- maxsus ovoz
 @dp.message(Command("maxsus_ovoz"))
 async def custom_voice_prompt(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID: return
-    await message.reply("✍️ **Ovozga aylantirib, kanalga tashlamoqchi bo'lgan matningizni yozib yuboring:**\n\n*(Bekor qilish uchun Menu'dan boshqa narsa tanlang)*", parse_mode="Markdown")
+    if not is_admin(message):
+        return
+    await message.reply("Ovozga aylantirib kanalga joylamoqchi bo'lgan matnni yuboring:")
     await state.set_state(AdminStates.waiting_for_voice_text)
+
 
 @dp.message(AdminStates.waiting_for_voice_text)
 async def process_custom_voice(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID: return
+    if not is_admin(message):
+        return
     await state.clear()
-    
-    wait_msg = await message.reply("⏳ Ovoz yaratilmoqda... Iltimos kuting.")
-    voice_filename = "custom_voice.ogg"
-    has_voice = await generate_voice(message.text, voice_filename)
-    
-    if has_voice and os.path.exists(voice_filename):
-        try:
-            voice_file = FSInputFile(voice_filename)
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=voice_file, caption=f"🎙 Maxsus xabar:\n\n{message.text[:900]}")
-            os.remove(voice_filename)
-            await wait_msg.edit_text("✅ Ovozli xabar kanalingizga muvaffaqiyatli yuborildi!")
-        except Exception as e:
-            await wait_msg.edit_text(f"❌ Kanalga tashlashda xatolik: {e}")
-    else:
-        await wait_msg.edit_text("❌ Ovoz yaratishda xatolik yuz berdi.")
+    wait = await message.reply("Ovoz yaratilmoqda...")
+    text = clean_for_channel(message.text or "")
+    ok, msg = await publish(bot, text, None, with_voice=True)
+    await wait.edit_text("Yuborildi!" if ok else f"Xatolik: {msg}")
 
-# ----- ESLATMA YARATISH (SMART REMINDERS) -----
-async def send_reminder_post(text_to_post):
-    try:
-        voice_filename = f"reminder_{datetime.now().strftime('%H%M%S')}.ogg"
-        has_voice = await generate_voice(text_to_post, voice_filename)
-        caption = f"⏰ **ESLATMA!**\n\n{text_to_post}"
-        
-        if has_voice and os.path.exists(voice_filename):
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), caption=caption)
-            os.remove(voice_filename)
-        else:
-            await bot.send_message(chat_id=CHANNEL_ID, text=caption)
-    except Exception as e:
-        logging.error(f"Eslatma yuborishda xatolik: {e}")
+
+# ---------------------------------------------------------------- eslatma
+async def send_reminder_post(text_to_post: str):
+    await guarded("eslatma", lambda: publish(
+        bot, clean_for_channel(text_to_post), None, with_voice=True, header="ESLATMA"))
+
 
 @dp.message(Command("eslatma"))
 async def reminder_prompt(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID: return
-    await message.reply("⏰ **Eslatmani yozing!**\nSana, vaqt va eslatma qilinishi kerak bo'lgan vazifani oddiy tilda yozavering.\n\n_Masalan: Ertaga soat 10:00 da Mirjalolga moy almashtirishni kanalga tashla._", parse_mode="Markdown")
+    if not is_admin(message):
+        return
+    await message.reply(
+        "Eslatmani oddiy tilda yozing.\n"
+        "Masalan: Ertaga soat o'nda Mirjalolga moy almashtirishni eslat.")
     await state.set_state(AdminStates.waiting_for_reminder)
+
 
 @dp.message(AdminStates.waiting_for_reminder)
 async def process_reminder(message: Message, state: FSMContext):
-    if message.from_user.id != ADMIN_ID: return
-    await state.clear()
-    
-    wait_msg = await message.reply("⏳ Vaqt hisoblanmoqda... Kuting.")
-    parsed = parse_reminder(message.text)
-    
-    if "XATO" in parsed or "|" not in parsed:
-        await wait_msg.edit_text("❌ Kechirasiz, eslatma vaqtini tushunmadim. Iltimos, soat va kunni aniqroq yozing.")
+    if not is_admin(message):
         return
-        
+    await state.clear()
+    wait = await message.reply("Vaqt hisoblanmoqda...")
+    parsed = await asyncio.to_thread(parse_reminder, message.text)
+
+    if "XATO" in parsed.upper() or "|" not in parsed:
+        await wait.edit_text("Eslatma vaqtini tushunmadim. Sana va soatni aniqroq yozing.")
+        return
+
     date_str, rem_text = parsed.split("|", 1)
     try:
         run_date = datetime.strptime(date_str.strip(), "%Y-%m-%d %H:%M")
-        scheduler.add_job(send_reminder_post, 'date', run_date=run_date, args=[rem_text.strip()])
-        await wait_msg.edit_text(f"✅ **Eslatma o'rnatildi!**\n📅 Vaqti: {run_date.strftime('%Y-%m-%d %H:%M')}\n📝 Vazifa: {rem_text.strip()}")
+        if run_date <= datetime.now():
+            await wait.edit_text("Bu vaqt allaqachon o'tib ketgan. Kelajakdagi vaqtni yozing.")
+            return
+        scheduler.add_job(send_reminder_post, "date", run_date=run_date,
+                          args=[rem_text.strip()], replace_existing=False)
+        await wait.edit_text(
+            f"Eslatma o'rnatildi!\nVaqti: {run_date.strftime('%Y-%m-%d %H:%M')}\n"
+            f"Vazifa: {rem_text.strip()}")
     except Exception as e:
-        await wait_msg.edit_text(f"❌ Vaqtni belgilashda xatolik: {e}")
+        await wait.edit_text(f"Vaqtni belgilashda xatolik: {e}")
 
-# ----- SAVOLLARGA JAVOB BERISH -----
+
+# ---------------------------------------------------------------- savollar
 @dp.message()
-@dp.channel_post()
 async def handle_questions(message: Message):
-    text = message.text or ""
-    if not text.strip():
+    text = (message.text or "").strip()
+    if not text or text.startswith("/"):
         return
-
-    bot_me = await bot.get_me()
-    is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id == bot_me.id
-    is_mentioned = bot_me.username and f"@{bot_me.username}" in text
-
-    if message.chat.type == 'private' or "?" in text or is_reply_to_bot or is_mentioned:
+    try:
+        me = await bot.get_me()
+        is_reply = (message.reply_to_message and message.reply_to_message.from_user
+                    and message.reply_to_message.from_user.id == me.id)
+        mentioned = me.username and f"@{me.username}" in text
+        if not (message.chat.type == "private" or "?" in text or is_reply or mentioned):
+            return
         try:
-            try:
-                await bot.send_chat_action(chat_id=message.chat.id, action="typing")
-            except Exception:
-                pass
-            answer = answer_question(text)
-            await message.reply(answer)
+            await bot.send_chat_action(chat_id=message.chat.id, action="typing")
+        except Exception:
+            pass
+        answer = await asyncio.to_thread(answer_question, text)
+        await message.reply(answer or "Javob tayyorlab bo'lmadi, qayta urinib ko'ring.")
+    except Exception as e:
+        log.exception("Savolga javob berishda xato: %s", e)
+
+
+@dp.channel_post()
+async def handle_channel_post(message: Message):
+    return  # kanaldagi o'z postlarimizga javob bermaymiz
+
+
+# ================================================================ JADVAL
+def setup_schedule():
+    j = scheduler.add_job
+    j(job_morning, "cron", hour=7, minute=0, id="morning", replace_existing=True)
+
+    j(job_person, "cron", hour=13, minute=0, args=["Mirjalol"], id="p_mirjalol", replace_existing=True)
+    j(job_person, "cron", hour=14, minute=0, args=["Rahmatillo"], id="p_rahmatillo", replace_existing=True)
+    j(job_person, "cron", hour=15, minute=0, args=["Abdullo"], id="p_abdullo", replace_existing=True)
+
+    # Antidoping — kunning asosiy mahsuloti: har ikki soatda, 8:30 dan 22:30 gacha
+    j(job_antidoping, "cron", hour="8-22/2", minute=30, id="antidoping", replace_existing=True)
+
+    log.info("Jadval o'rnatildi: %d ta vazifa", len(scheduler.get_jobs()))
+
+
+async def watchdog():
+    """Uzoq vaqt post chiqmasa — o'zi tekshirib, zaxira post joylaydi."""
+    while True:
+        await asyncio.sleep(1800)
+        try:
+            last = STATUS.get("last_post")
+            if last:
+                delta = time.time() - time.mktime(time.strptime(last, "%Y-%m-%d %H:%M:%S"))
+                hour = datetime.now().hour
+                if delta > 5 * 3600 and 8 <= hour <= 22:
+                    log.warning("Besh soatdan beri post yo'q — zaxira post joylanmoqda")
+                    await guarded("watchdog antidoping", do_antidoping, retries=2)
         except Exception as e:
-            logging.error(f"Javob berishda xatolik: {e}")
+            log.warning("Watchdog xatosi: %s", e)
 
-# ----- AVTOMATIK POSTLAR -----
-async def send_morning_post():
-    try:
-        text = generate_morning_post()
-        voice_filename = "morning.ogg"
-        has_voice = await generate_voice(text, voice_filename)
-        sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
-        if has_voice and os.path.exists(voice_filename):
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), reply_to_message_id=sent.message_id)
-            os.remove(voice_filename)
-    except Exception as e:
-        logging.error(f"Tonggi post xatolik: {e}")
 
-async def send_person_post(person=None):
-    import random
-    if not person:
-        person = random.choice(["Rahmatillo", "Mirjalol", "Abdullo"])
+# ================================================================ ISHGA TUSHIRISH
+async def run_bot():
+    problems = config.missing_critical()
+    if problems:
+        log.error("Sozlamalar to'liq emas: %s", ", ".join(problems))
+        if not config.BOT_TOKEN:
+            return
 
-    try:
-        text, image_url = generate_person_post(person)
-        voice_filename = f"person_{person}.ogg"
-        has_voice = await generate_voice(text, voice_filename)
-        
-        if image_url:
-            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
-            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
-        else:
-            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
-            
-        if has_voice and os.path.exists(voice_filename):
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), reply_to_message_id=sent.message_id)
-            os.remove(voice_filename)
-    except Exception as e:
-        logging.error(f"Shaxsiy post xatolik: {e}")
-
-async def send_antidoping_post():
-    try:
-        text, image_url = generate_antidoping_post()
-        voice_filename = "antidoping.ogg"
-        has_voice = await generate_voice(text, voice_filename)
-        
-        if image_url:
-            sent_photo = await bot.send_photo(chat_id=CHANNEL_ID, photo=URLInputFile(image_url))
-            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text, reply_to_message_id=sent_photo.message_id)
-        else:
-            sent = await bot.send_message(chat_id=CHANNEL_ID, text=text)
-            
-        if has_voice and os.path.exists(voice_filename):
-            await bot.send_voice(chat_id=CHANNEL_ID, voice=FSInputFile(voice_filename), reply_to_message_id=sent.message_id)
-            os.remove(voice_filename)
-    except Exception as e:
-        logging.error(f"Anti-doping post xatolik: {e}")
-
-from aiogram.types import BotCommand
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    keep_alive()
-
-    # Telegram'ning pastki chap burchagidagi Menu tugmasini sozlash
     await bot.set_my_commands([
-        BotCommand(command="tonggi_post", description="🌅 Tonggi post yaratish"),
-        BotCommand(command="rahmatillo", description="😎 Rahmatillo uchun post"),
-        BotCommand(command="mirjalol", description="🤓 Mirjalol uchun post"),
-        BotCommand(command="abdullo", description="🧐 Abdullo uchun post"),
-        BotCommand(command="maxsus_ovoz", description="🎙 Maxsus ovozli xabar"),
-        BotCommand(command="eslatma", description="⏰ Aniq vaqtli eslatma qo'shish"),
-        BotCommand(command="antidoping", description="🏋️ Anti-doping post")
+        BotCommand(command="antidoping", description="Ilmiy antidoping post"),
+        BotCommand(command="tonggi_post", description="Tonggi post"),
+        BotCommand(command="rahmatillo", description="Rahmatillo uchun post"),
+        BotCommand(command="mirjalol", description="Mirjalol uchun post"),
+        BotCommand(command="abdullo", description="Abdullo uchun post"),
+        BotCommand(command="maxsus_ovoz", description="Maxsus ovozli xabar"),
+        BotCommand(command="eslatma", description="Aniq vaqtli eslatma"),
+        BotCommand(command="holat", description="Bot va AI holati"),
     ])
 
-    # 1. Ertalab soat 7:00 da tonggi post
-    scheduler.add_job(send_morning_post, 'cron', hour=7, minute=0)
-    
-    # 2. Har bir bola uchun faqat belgilangan vaqtda bitta post (Jami 3 ta post)
-    # Mirjalolga - 13:00 (1 da)
-    scheduler.add_job(send_person_post, 'cron', hour=13, minute=0, args=["Mirjalol"])
-    # Rahmatilloga - 14:00 (2 da)
-    scheduler.add_job(send_person_post, 'cron', hour=14, minute=0, args=["Rahmatillo"])
-    # Abdulloga - 15:00 (3 da)
-    scheduler.add_job(send_person_post, 'cron', hour=15, minute=0, args=["Abdullo"])
+    if not scheduler.running:
+        setup_schedule()
+        scheduler.start()
 
-    # 3. Anti-doping post - Har 2 soatda tashlash (Masalan: 8:30, 10:30, 12:30...)
-    scheduler.add_job(send_antidoping_post, 'cron', hour='8-22/2', minute=30)
+    asyncio.create_task(watchdog())
 
-    scheduler.start()
-    logging.info("Bot ishga tushdi!")
-    await dp.start_polling(bot)
+    log.info("Bot ishga tushdi. Kanal: %s | AI marshrutlari: %d",
+             config.CHANNEL_ID, len(ai_engine.health()))
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+
+
+async def supervisor():
+    """Polling yiqilsa ham bot o'zini qayta tiklaydi — cheksiz."""
+    keep_alive()
+    delay = 5
+    while True:
+        try:
+            await run_bot()
+            delay = 5
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            log.exception("Bot yiqildi, qayta ishga tushirilmoqda (%s soniya): %s", delay, e)
+            await asyncio.sleep(delay)
+            delay = min(300, delay * 2)
+
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(supervisor())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Bot to'xtatildi.")
+        log.info("Bot to'xtatildi.")

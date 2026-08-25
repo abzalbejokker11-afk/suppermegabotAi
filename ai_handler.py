@@ -1,216 +1,245 @@
-import os
+"""
+Postlarni tayyorlovchi qatlam.
+Barcha funksiyalar (matn, xato_sababi) emas — (matn, rasm_url) qaytaradi
+va HECH QACHON istisno tashlamaydi.
+"""
 import logging
-import requests
 import random
-import datetime
 import urllib.parse
-from dotenv import load_dotenv
-from google import genai
+import datetime
 
-load_dotenv()
+import requests
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+import config
+import topics
+from ai_engine import generate
+from textutils import clean_for_channel
 
-# Google GenAI client yaratish
-client = genai.Client(api_key=GEMINI_API_KEY)
-MODELS = ["gemini-flash-latest", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.6-flash"]
+log = logging.getLogger("handler")
 
-def call_ai(prompt):
-    if not GEMINI_API_KEY:
-        return "Sun'iy intellekt API kaliti sozlanmagan!"
-    
-    last_error = None
-    for model_name in MODELS:
+# ---------------------------------------------------------------- umumiy qoidalar
+STYLE_RULES = """
+QAT'IY QOIDALAR:
+1. Matnda hech qanday maxsus belgi ishlatma: yulduzcha, panjara, tire, pastki chiziq, qavs, emoji — YO'Q.
+2. Barcha raqamlarni so'z bilan yoz (o'n, yuz, ming).
+3. Inglizcha atamalarni birinchi marta keltirganda o'zbekcha o'qilishini ham yoz.
+4. Matnni go'zal ovozli diktor qiz o'qib beradi — jumlalar ravon, tinish belgilari to'g'ri bo'lsin.
+5. Ro'yxat qilma, oqar matn (abzatslar) shaklida yoz.
+""".strip()
+
+
+def _split_prompt_and_text(full: str, default_img: str):
+    """Birinchi qator — rasm prompti, qolgani — matn."""
+    if not full:
+        return "", default_img
+    lines = full.strip().split("\n", 1)
+    first = lines[0].strip()
+    # birinchi qator inglizcha va qisqa bo'lsa — rasm prompti
+    looks_like_prompt = (
+        len(lines) >= 2
+        and len(first) < 220
+        and sum(c.isascii() for c in first) > len(first) * 0.85
+    )
+    if looks_like_prompt:
+        return lines[1].strip(), first
+    return full.strip(), default_img
+
+
+def _image_url(prompt: str) -> str:
+    seed = random.randint(1, 10_000_000)
+    q = urllib.parse.quote(prompt[:300])
+    return (f"https://image.pollinations.ai/prompt/{q}"
+            f"?width=1024&height=1024&nologo=true&seed={seed}")
+
+
+def fetch_image(url: str, tries: int = 3):
+    """Rasmni yuklab olib baytlarini qaytaradi. Bo'lmasa None."""
+    for i in range(tries):
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
-            return response.text
+            r = requests.get(url, timeout=70)
+            ct = r.headers.get("content-type", "")
+            if r.status_code == 200 and ct.startswith("image") and len(r.content) > 8000:
+                return r.content
+            log.warning("Rasm yuklanmadi (%s, %s bayt)", r.status_code, len(r.content))
         except Exception as e:
-            last_error = str(e)
-            logging.error(f"Gemini API xatosi ({model_name}): {last_error}")
-            continue
+            log.warning("Rasm xatosi: %s", e)
+        url = url.split("?")[0] + f"?width=1024&height=1024&nologo=true&seed={random.randint(1, 9999999)}"
+    return None
 
-    if "429" in last_error or "RESOURCE_EXHAUSTED" in last_error:
-        return "Kechirasiz, Sun'iy Intellekt hozir juda ko'p so'rov qabul qildi (Google bepul limitiga tushib qoldik). Iltimos, bir oz kutib turing va qayta urinib ko'ring!"
-    elif "503" in last_error or "UNAVAILABLE" in last_error:
-        return "Kechirasiz, Google serverlari hozir haddan tashqari band. Iltimos, 5-10 daqiqadan so'ng qayta urinib ko'ring!"
-        
-    return f"Kechirasiz, xatolik yuz berdi: {last_error}"
 
-def answer_question(question):
-    prompt = f"Foydalanuvchi quyidagi savolni berdi:\n\"{question}\"\nUnga o'zbek tilida, do'stona, to'g'ri va yordam beruvchi ohangda qisqa javob yoz. Yodda tut, hech qanday yulduzchalar va raqamlarni ishlatma, ovozli o'qish uchun mosla."
-    return call_ai(prompt)
+# ---------------------------------------------------------------- 1. Savol-javob
+def answer_question(question: str) -> str:
+    prompt = (f"Foydalanuvchi savoli:\n\"{question}\"\n\n"
+              "Unga o'zbek tilida, do'stona va aniq javob yoz. "
+              "Javob mazmunli bo'lsin, lekin cho'zib yuborma.\n" + STYLE_RULES)
+    out = generate(prompt, offline_fn=lambda: (
+        "Hozir sun'iy intellekt xizmati bilan aloqa vaqtincha uzildi. "
+        "Savolingizni bir necha daqiqadan so'ng qayta yuboring, men albatta javob beraman."))
+    return clean_for_channel(out or "")
 
-def generate_morning_post():
+
+# ---------------------------------------------------------------- 2. Tonggi post
+def _weather():
     try:
-        headers = {}
-        # Obfuscating GitHub PAT to bypass secret scanner
-        default_pat = "ghp_Sal5TLH1Z" + "M0OMgC7uaN" + "PwDrGTxEIt5286RqW"
-        github_pat = os.getenv("GITHUB_PAT", default_pat)
-        if github_pat:
-            headers['Authorization'] = f'token {github_pat}'
-            
-        gh_resp = requests.get("https://api.github.com/search/repositories?q=stars:>5000&sort=updated&order=desc&per_page=3", headers=headers, timeout=10)
-        if gh_resp.status_code == 200:
-            items = gh_resp.json().get("items", [])
-            news_text = "Bugungi GitHub IT yangiliklari:\n"
-            for item in items:
-                news_text += f"Loyiha nomi: {item['name']}. Ma'lumot: {item.get('description', 'Tavsif mavjud emas')}\n"
-        else:
-            news_text = "Bugun IT olamida juda ko'p qiziqarli yangiliklar bo'lyapti."
-    except Exception:
-        news_text = "Bugun texnologiyalar olamida katta kashfiyotlar kuni bo'lishi kutilmoqda."
-
-    weather_text = ""
-    try:
-        w_resp = requests.get("https://wttr.in/Tashkent?format=%C+%t", timeout=5)
-        if w_resp.status_code == 200:
-            weather_text = f"Toshkentda hozirgi ob-havo: {w_resp.text.strip()}"
+        r = requests.get(f"https://wttr.in/{config.CITY}?format=%C+%t", timeout=8)
+        if r.status_code == 200 and len(r.text) < 120:
+            return f"{config.CITY} ob-havosi: {r.text.strip()}"
     except Exception:
         pass
+    return ""
 
-    prompt = f"""
-    Sen tajribali va xarizmatik IT blogersan. Telegram kanalingda ertalabki postni yozyapsan.
-    Hozirgi yangiliklar:
-    {news_text}
-    {weather_text}
-    Shu ma'lumotlardan va ob-havodan foydalanib, dasturchilar uchun juda qiziqarli, motivatsion va o'zbek tilida tonggi post tayyorla. Post ohangi do'stona va pozitiv bo'lsin.
-    Unutma: Hech qanday maxsus belgilar (*, #, -) ishlatma, raqamlarni so'z bilan yoz, matn diktor o'qishi uchun qulay bo'lsin!
-    """
-    return call_ai(prompt)
 
-def generate_person_post(person_name):
-    traits = {
-        "Mirjalol": [
-            "Shineray t o'ttiz va t ellik haqida ma'lumotlarni bilib yurish kerakligi, boshliq so'rab qolsa 'bilmayman' deb mak-mak qilib qolmasdan darhol javob berish kerakligi haqida qattiq va jiddiy maslahat.",
-            "Shineray t o'ttiz va t ellik haqida qiziqish, Labodan ko'ra nima uchun yaxshiroq ekanligini taqqoslash va Shinerayni maqtagan holda yozish.",
-            "Boshliqqa Shineray haqida hamma ma'lumotlarni o'rganib chiqib tushuntirishi va tez orada o'sha mashinaga erishish uchun kuchli motivatsiya.",
-            "Mashina moyini almashtirish va motorga texnik xizmat ko'rsatish haqida o'ziga xos eslatma.",
-            "Yo'l qoidalariga rioya qilish, radar va tezlikni oshirmaslik haqida hazilomuz maslahat.",
-            "Mashinani doim top-toza tutish va chiroyli haydash haqida.",
-            "Benzinni tejab haydash sirlari va mashina xarajatlarini kamaytirish haqida.",
-            "Mashinada yaxshi musiqa qo'yib, hayotdan zavqlanib haydash va yaxshi kayfiyat haqida motivatsiya.",
-            "Kelajakda nafaqat Shineray, balki undan ham zo'r tijorat mashinalari olish niyati va rejalari haqida.",
-            "Rulda doim xushyor bo'lish va o'ziga ishonib haydash haqida hazil aralash daldalar."
-        ],
-        "Rahmatillo": [
-            "Sun'iy intellekt (AI) bilan har kuni shug'ullanish kerakligi. Shunday degin: 'Men ham oldin sun'iy intellekt nimaligini bilmas edim, lekin har kuni kodim ko'payib rivojlanyapman, sen ham rivojlan, bitta qadam qo'y' deb kuchli motivatsiya usulida post yozish.",
-            "Kichik harakatlar ham katta yutuqqa olib borishi haqida aytib, Antigravity sun'iy intellektini ham ishlatib ko'rishni, Antigravity Claude dan ham kuchliroq ekanini aytib maqtash.",
-            "Claude yordamida 'Sotuv oynasi' saytini zo'r qilib yaratayotgani bilan uni maqtash va sayt yaratish ishlariga yanada qiziqtirish.",
-            "Dasturlash, zamonaviy texnergiyalarga bo'lgan qiziqishi kelajakda uni kuchli mutaxassis qilishini aytib ruhlantirish.",
-            "Tezroq uylanish kerakligi, qiz topish va uydagilarni xursand qilish haqida hazil.",
-            "Yaxshi joy bo'lsa 'ichkuyov'likka ham rozi bo'laverish kerakligi, asosiysi qizning qalb go'zalligi ekanligi haqida kulgili maslahat.",
-            "Qizlarga yoqish uchun o'ziga qarab yurish, sport bilan shug'ullanish va zamonaviy kiyinish haqida.",
-            "Kelajakdagi to'y xarajatlari uchun ko'proq ish ishlash, pul topish va tejash haqida motivatsiya.",
-            "Haqiqiy sevgi va munosabatlar psixologiyasi, o'z tengini topish qiyinligi haqida qisqa falsafiy post.",
-            "O'z ustida ishlash orqali texnologiya sohasida va biznesda mustaqil shaxsga aylanish."
-        ],
-        "Abdullo": [
-            "O'ta lanj bo'lmasdan harakat qilish kerakligi, hayotga real qarash zarurligi, omad o'zi yugurib kelmasligi va omadga faqat qiyinchiliklar bilan erishish mumkinligi haqida o'ta jiddiy va kuchli motivatsiya.",
-            "Ishda shoshmasdan, o'ylab harakat qilish va tovarlarda umuman adashmaslik kerakligi, bu o'zini anglash va katta yutuqlar olib kelishi haqida.",
-            "Og'ir yuklarni ko'tarmaslik, kuch o'rniga aqlni ishlatish va o'z sog'lig'ini qattiq asrash haqida jiddiy maslahat.",
-            "Ota-onaga doim yaxshilik qilish, ularni qadrlash, hurmat qilish va duosini olish hayotdagi eng asosiy narsa ekanligi haqida.",
-            "Chekish, ichish kabi yomon illatlardan umuman yiroq bo'lish va faqat sog'lom hayot sari intilish zarurligi.",
-            "Kitob o'qish, ilm olish va universitetga tayyorgarlik ko'rish eng muhim vazifasi ekanligi haqida qattiq motivatsiya.",
-            "Ijtimoiy tarmoqlar va bekorchi o'yinlardan chalg'imasdan dars qilishga chaqiriq.",
-            "Vaqtni to'g'ri taqsimlash va kelajakda kuchli mutaxassis bo'lish sirlari haqida.",
-            "Imtihonlarga tayyorgarlik paytidagi dangasalikni yengish va miyani charxlash haqida maslahat.",
-            "Sog'lom fikrlash, halol mehnat qilish va ertangi kunga ishonch bilan qadam tashlash."
-        ]
-    }
-    
-    person_topics = traits.get(person_name, ["Unga ijobiy va pozitiv motivatsiya ber."])
-    selected_topic = random.choice(person_topics)
+def _tech_news():
+    try:
+        headers = {"Accept": "application/vnd.github+json"}
+        if config.GITHUB_PAT:
+            headers["Authorization"] = f"token {config.GITHUB_PAT}"
+        r = requests.get(
+            "https://api.github.com/search/repositories?q=stars:>5000&sort=updated&order=desc&per_page=3",
+            headers=headers, timeout=12)
+        if r.status_code == 200:
+            items = r.json().get("items", [])
+            if items:
+                return "Bugungi ochiq kodli loyihalar: " + "; ".join(
+                    f"{i['name']} — {(i.get('description') or 'tavsifsiz')[:120]}" for i in items)
+    except Exception as e:
+        log.warning("GitHub xatosi: %s", e)
+    # zaxira manba
+    try:
+        r = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json", timeout=10)
+        ids = r.json()[:3]
+        titles = []
+        for i in ids:
+            d = requests.get(f"https://hacker-news.firebaseio.com/v0/item/{i}.json", timeout=8).json()
+            if d and d.get("title"):
+                titles.append(d["title"])
+        if titles:
+            return "Texnologiya yangiliklari: " + "; ".join(titles)
+    except Exception:
+        pass
+    return "Bugun texnologiyalar olamida odatdagidek qizg'in ish kuni."
 
-    prompt = f"""
-    Sen {person_name} ismli yigit uchun maxsus telegram post tayyorlashing kerak.
-    Bugun {person_name} uchun TANLANGAN MAVZU: "{selected_topic}"
-    
-    Ushbu mavzuni to'liq ochib berib, uni harakatga keltiradigan, ish faoliyatini oshirishga qaratilgan kuchli motivatsion matn yoz.
-    Postni shaxsan unga qaratib yoz (masalan, "Eshityapsanmi {person_name}"). Mantiqli, hayotiy va ta'sirchan bo'lsin.
-    
-    MUHIM QOIDALAR:
-    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "A young programmer coding on a laptop, highly detailed cinematic lighting"). Faqat promptning o'zini yoz, hech qanday qo'shimcha so'z qo'shma.
-    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATNNI YOZ!
-    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni va inglizcha so'zlarni hamisha o'qilishi bo'yicha harflar bilan yoz. Matnni go'zal ovozli diktor qiz o'qib beradi, shuning uchun juda ravon va toza o'zbek tilida bo'lsin.
-    """
-    
-    full_response = call_ai(prompt)
-    
-    if "xatolik yuz berdi" in full_response.lower() or "limit" in full_response.lower():
-        return full_response, None
-        
-    lines = full_response.split('\n', 1)
-    if len(lines) >= 2:
-        image_prompt = lines[0].strip()
-        text_content = lines[1].strip()
-    else:
-        # Xavfsizlik uchun, agar promptni ajrata olmasa
-        image_prompt = "A motivational scene for a young boy, highly detailed"
-        text_content = full_response
-        
-    # image_prompt'dan xavfsiz URL yaratish
-    image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(image_prompt)}"
-    
-    return text_content, image_url
 
-def parse_reminder(text):
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    prompt = f"""
-    Sen vaqtni tahlil qiluvchi botsan. Hozirgi vaqt: {now}.
-    Foydalanuvchi ushbu eslatmani yozdi: "{text}"
-    Sening vazifang matndan sanani, soatni va eslatma mazmunini aniqlash.
-    Agar foydalanuvchi "ertaga", "indinga" kabi so'zlarni ishlatsa, hozirgi vaqtga qarab hisobla.
-    Natijani faqat mana shu qat'iy formatda qaytar (ortiqcha so'z yozma):
-    YYYY-MM-DD HH:MM|eslatma mazmuni
-    Agar vaqtni mutlaqo tushunmasang, faqatgina "XATO" deb yoz.
-    """
-    return call_ai(prompt).strip()
+def generate_morning_post():
+    news = _tech_news()
+    weather = _weather()
+    prompt = f"""Sen tajribali IT blogersan. Telegram kanaling uchun tonggi post yozyapsan.
+
+Bugungi ma'lumotlar:
+{news}
+{weather}
+
+Shu ma'lumotlarga tayangan holda dasturchilar uchun qiziqarli, aniq faktlarga asoslangan
+va ruhlantiruvchi tonggi post yoz. Uzunligi uch to'rt abzats.
+{STYLE_RULES}"""
+
+    def offline():
+        return (f"Xayrli tong. {weather or ''} Bugungi kun yangi bilim olish uchun ajoyib imkoniyat. "
+                f"{news} Kichik bo'lsa ham bir qadam tashlang, kuningiz barakali o'tsin.")
+
+    out = generate(prompt, offline_fn=offline)
+    return clean_for_channel(out or offline())
+
+
+# ---------------------------------------------------------------- 3. Shaxsiy post
+def generate_person_post(person_name: str):
+    bank = topics.PERSON_TRAITS.get(person_name, ["Unga ijobiy motivatsiya ber"])
+    topic = topics.pick(f"person_{person_name}", bank)
+
+    prompt = f"""Sen {person_name} ismli yigit uchun shaxsiy telegram post yozyapsan.
+Bugungi mavzu: "{topic}"
+
+Mavzuni to'liq ochib ber, hayotiy misollar keltir, uni harakatga undaydigan kuchli
+va samimiy matn yoz. Postni bevosita unga qaratib yoz. Uzunligi uch to'rt abzats.
+
+BIRINCHI QATORGA: shu mavzuga mos, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA
+qisqa prompt yoz (faqat promptning o'zi).
+IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATN.
+{STYLE_RULES}"""
+
+    def offline():
+        return ("A determined young man working hard, cinematic lighting\n"
+                f"Eshityapsanmi {person_name}. Bugungi mavzu shu: {topic}. "
+                "Bir daqiqa to'xtab, shu haqda o'ylab ko'r va bugundan kichik bir qadam tashla. "
+                "Har kuni tashlangan kichik qadam bir yildan keyin seni tanib bo'lmas darajada o'zgartiradi.")
+
+    full = generate(prompt, offline_fn=offline)
+    text, img_prompt = _split_prompt_and_text(
+        full, "A motivational portrait of a young man, cinematic lighting, highly detailed")
+    return clean_for_channel(text), _image_url(img_prompt)
+
+
+# ---------------------------------------------------------------- 4. ANTIDOPING (asosiy)
 def generate_antidoping_post():
-    doping_topics = [
-        "Antidoping nazorati laboratoriyalarida qo'llaniladigan yuqori samarali suyuqlik xromatografiyasi va mass spektrometriya texnologiyalari. (Pikogramm aniqlik, metabolitlar)",
-        "Sportchining biologik pasporti tizimi (ABP) qanday ishlaydi? Qon va siydik tahlillaridagi uzoq muddatli g'ayritabiiy tebranishlar fosh etilishi.",
-        "Qat'iy javobgarlik prinsipi (Butunjahon antidoping kodeksi) - nima uchun sportchi o'z vujudiga tushgan har bir modda uchun javobgar?",
-        "Anabolik steroidlarning inson endokrin (gormonal) tizimiga ko'rinmas, ammo uzoq muddatli halokatli zararlari va oqibatlari.",
-        "Qon dopingi (Eritropoetin, EPO) jarayoni sirlari, uning yurak-qon tomir tizimiga xavfi va qonning quyuqlashishi oqibatida kelib chiqadigan xatarlar.",
-        "Oziq-ovqat qo'shimchalari (BAA) ichida yashiringan xavf: nima uchun oddiy protein yoki vitamin tarkibida taqiqlangan moddalar bo'lishi mumkin?",
-        "Gen dopingi - sportning biokimyoviy olamidagi eng yangi tahdid va uni aniqlashda o'rganilayotgan ilg'or molekulyar biologiya usullari.",
-        "Diuretiklar va niqoblovchi moddalar (peshob haydovchi dorilar) nima uchun qat'iyan man etilgan va laboratoriya ularni qanday fosh etadi?",
-        "TUE (Terapevtik istisnolar) - kasal sportchilarga dori qabul qilishga ruxsat berishdagi xalqaro standartlar va qat'iy tibbiy shartlar.",
-        "Psixostimulyatorlar va narkotik moddalarning markaziy asab tizimiga vaqtincha ta'siri hamda poygadan keyingi mudhish psixologik depressiya holatlari."
-    ]
-    
-    selected_topic = random.choice(doping_topics)
-    
-    prompt = f"""
-    Sen yuqori toifali, ilmiy izlanuvchi va sport tibbiyoti bo'yicha ekspert-motivatorsan.
-    Sening vazifang - ANTI-DOPING mavzusida juda chuqur ilmiy, dolzarb, lekin hamma tushunadigan tilda o'ta batafsil va ta'sirli telegram post yozish.
-    
-    Bugungi TANLANGAN ILMIY MAVZU: "{selected_topic}"
-    
-    Matn qisqa bo'lmasin. Mavzuni ilmiy jihatdan keng yoritib ber. Xuddi zamonaviy tibbiy maqola va ilmiy-ommabop ruhda yoz.
-    (Misol uchun: metabolizm yo'llari, pikogramm sezgirlik, qon tarkibidagi o'zgarishlar va hokazolarni tilga olib, oxirida toza sportga unda).
-    
-    MUHIM QOIDALAR:
-    1. ENG BIRINCHI QATORDAGA: Aynan shu mavzuga to'liq mos keladigan, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA qisqa propmt yoz (masalan: "High tech medical laboratory analyzing a blood sample with blue cinematic lighting"). Faqat promptning o'zini yoz.
-    2. IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY-BATAFSIL MATNNI YOZ!
-    3. Matnda HEECH QANDAY maxsus belgilar (*, #, -, _, emoji) ishlata ko'rma! Raqamlarni (masalan 10, 100) so'z bilan (o'n, yuz) yoz. Ovozli diktor qiz o'qib beradi, matn juda ravon va toza o'zbek tilida bo'lsin.
-    """
-    
-    full_response = call_ai(prompt)
-    if "xatolik yuz berdi" in full_response.lower() or "limit" in full_response.lower():
-        return full_response, None
-        
-    lines = full_response.split('\n', 1)
-    if len(lines) >= 2:
-        image_prompt = lines[0].strip()
-        text_content = lines[1].strip()
-    else:
-        image_prompt = "A high-tech anti-doping laboratory, highly detailed, cinematic"
-        text_content = full_response
-        
-    image_url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(image_prompt)}"
-    return text_content, image_url
+    topic = topics.pick("antidoping", topics.ANTIDOPING)
 
+    prompt = f"""Sen sport tibbiyoti va antidoping sohasidagi ilmiy tadqiqotchisan.
+Telegram kanali uchun CHUQUR ILMIY, ishonchli va batafsil post yozyapsan.
+
+BUGUNGI ILMIY MAVZU: "{topic}"
+
+Postning ilmiy tuzilishi (sarlavhalarsiz, oqar matn shaklida, lekin shu ketma-ketlikda):
+1. Muammoning qo'yilishi — bu masala nima uchun sport tibbiyotida dolzarb.
+2. Fiziologik va biokimyoviy mexanizm — organizmda aynan nima sodir bo'ladi:
+   qaysi hujayra, qaysi ferment, qaysi retseptor, qaysi metabolik yo'l.
+3. Analitik yoki tibbiy metodika — qanday o'lchanadi, aniqlanadi yoki baholanadi,
+   qanday sezgirlik va aniqlik darajasida.
+4. Ilmiy dalillar — Butunjahon antidoping agentligi standartlari, xalqaro
+   laboratoriya amaliyoti va tadqiqot natijalariga tayangan aniq faktlar.
+5. Sog'liq uchun oqibatlar — qisqa va uzoq muddatli asoratlar, aniq organ tizimlari bo'yicha.
+6. Amaliy xulosa — sportchi va murabbiy uchun aniq, bajarilishi mumkin bo'lgan tavsiyalar.
+
+TALABLAR:
+- Matn KAMIDA olti yetti abzats va {config.MIN_SCIENCE_CHARS} belgidan uzun bo'lsin.
+- Quruq motivatsiya YOZMA. Faqat ilmiy mazmun, aniq atamalar va faktlar.
+- Har bir atamani keltirganda uni bir jumlada sodda tushuntirib ket.
+- O'ylab topilgan raqam, soxta statistika yoki mavjud bo'lmagan tadqiqotga havola keltirma.
+  Aniq bilmasang, umumlashtirib yoz.
+- Oxirida bir abzats toza sport g'oyasiga bag'ishlansin.
+
+BIRINCHI QATORGA: shu mavzuga mos, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA
+qisqa prompt yoz (masalan: "modern anti-doping laboratory, mass spectrometer,
+scientist analyzing blood sample, blue cinematic lighting"). Faqat promptning o'zi.
+IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY MATN.
+{STYLE_RULES}"""
+
+    def offline():
+        return ("modern anti-doping laboratory with mass spectrometer, blue cinematic lighting\n"
+                f"Bugungi ilmiy mavzu: {topic}. "
+                "Antidoping nazorati zamonaviy sport tibbiyotining eng aniq va eng murakkab "
+                "sohalaridan biridir. Har bir namuna xalqaro standartlar asosida, akkreditatsiyalangan "
+                "laboratoriyalarda, ikki bosqichli tekshiruvdan o'tkaziladi. Sportchi o'z organizmiga "
+                "tushgan har qanday modda uchun shaxsan javobgar. Shuning uchun har bir dori va har bir "
+                "oziq-ovqat qo'shimchasi shifokor bilan maslahatlashib qabul qilinishi shart. "
+                "Toza sport — bu nafaqat qoida, bu sportchining sog'lig'i va uzoq yillik karyerasi kafolati.")
+
+    full = generate(prompt, offline_fn=offline)
+    text, img_prompt = _split_prompt_and_text(
+        full, "modern anti-doping laboratory, mass spectrometer, scientific, cinematic lighting")
+
+    # SIFAT NAZORATI: post juda qisqa bo'lsa — kengaytirish uchun ikkinchi urinish
+    if text and len(text) < config.MIN_SCIENCE_CHARS * 0.7:
+        log.info("Post qisqa (%d belgi) — kengaytirilmoqda", len(text))
+        expand = (f"Quyidagi ilmiy matnni sifatini saqlagan holda ikki barobar kengaytir. "
+                  f"Mexanizmni chuqurroq tushuntir, analitik metodikani batafsil yoz, "
+                  f"sog'liq uchun oqibatlarni organ tizimlari bo'yicha och. "
+                  f"Yangi soxta raqam qo'shma.\n\nMATN:\n{text}\n\n{STYLE_RULES}")
+        bigger = generate(expand, allow_offline=False)
+        if bigger and len(bigger) > len(text):
+            text = bigger
+
+    return clean_for_channel(text), _image_url(img_prompt)
+
+
+# ---------------------------------------------------------------- 5. Eslatma tahlili
+def parse_reminder(text: str) -> str:
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = f"""Sen vaqtni tahlil qiluvchi tizimsan. Hozirgi vaqt: {now}.
+Foydalanuvchi yozdi: "{text}"
+Matndan sana, soat va eslatma mazmunini aniqla.
+"ertaga", "indinga", "bir soatdan keyin" kabi so'zlarni hozirgi vaqtga nisbatan hisobla.
+Natijani FAQAT shu formatda qaytar, boshqa hech narsa yozma:
+YYYY-MM-DD HH:MM|eslatma mazmuni
+Vaqtni aniqlay olmasang faqat XATO deb yoz."""
+    out = generate(prompt, allow_offline=False)
+    return (out or "XATO").strip().split("\n")[0]
