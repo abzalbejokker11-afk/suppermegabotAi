@@ -6,3 +6,4 @@ python-dotenv>=1.0
 edge-tts>=6.1
 google-genai>=2.18
 pydantic>=2.12
+openai
