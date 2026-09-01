@@ -186,7 +186,9 @@ def generate(prompt, attempts_per_route=2, allow_offline=True, offline_fn=None):
                         with _lock:
                             _stats["ok"] += 1
                         log.info("AI OK -> %s", tag)
-                        return text.strip()
+                        import re
+                        clean = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+                        return clean.strip()
                     raise RuntimeError("bo'sh javob")
                 except Exception as e:
                     last_error = str(e)
