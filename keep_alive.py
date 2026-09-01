@@ -4,6 +4,8 @@ Doimiy ishlash uchun HTTP server + o'z-o'zini ping qilish (Replit/Render uchun).
 import logging
 import threading
 import time
+import os
+import json
 
 import requests
 from flask import Flask, jsonify
@@ -13,8 +15,29 @@ import config
 log = logging.getLogger("keepalive")
 app = Flask(__name__)
 
-STATUS = {"started": time.time(), "last_post": None, "posts": 0, "errors": 0}
+_STATUS_FILE = os.path.join(config.STATE_DIR, "system_status.json")
 
+def _load_status():
+    default_status = {"started": time.time(), "last_post": None, "posts": 0, "errors": 0}
+    if os.path.exists(_STATUS_FILE):
+        try:
+            with open(_STATUS_FILE, "r") as f:
+                data = json.load(f)
+                default_status.update(data)
+                default_status["started"] = time.time()  # Reset start time on boot
+        except Exception:
+            pass
+    return default_status
+
+STATUS = _load_status()
+
+def save_status():
+    os.makedirs(config.STATE_DIR, exist_ok=True)
+    try:
+        with open(_STATUS_FILE, "w") as f:
+            json.dump(STATUS, f)
+    except Exception:
+        pass
 
 @app.route("/")
 def home():

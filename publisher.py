@@ -117,4 +117,6 @@ async def publish(bot, text: str, image_url: str | None = None,
         STATUS["posts"] += 1
         import time
         STATUS["last_post"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        import keep_alive
+        keep_alive.save_status()
         return True, "Muvaffaqiyatli joylandi"

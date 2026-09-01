@@ -89,7 +89,13 @@ def _weather():
     return ""
 
 
+_news_cache = {"time": 0, "data": ""}
+
 def _tech_news():
+    global _news_cache
+    if time.time() - _news_cache["time"] < 3600:
+        return _news_cache["data"]
+
     try:
         headers = {"Accept": "application/vnd.github+json"}
         if config.GITHUB_PAT:
@@ -100,11 +106,14 @@ def _tech_news():
         if r.status_code == 200:
             items = r.json().get("items", [])
             if items:
-                return "Bugungi ochiq kodli loyihalar: " + "; ".join(
+                result = "Bugungi ochiq kodli loyihalar: " + "; ".join(
                     f"{i['name']} — {(i.get('description') or 'tavsifsiz')[:120]}" for i in items)
+                _news_cache["time"] = time.time()
+                _news_cache["data"] = result
+                return result
     except Exception as e:
         log.warning("GitHub xatosi: %s", e)
-    # zaxira manba
+
     try:
         r = requests.get("https://hacker-news.firebaseio.com/v0/topstories.json", timeout=10)
         ids = r.json()[:3]
@@ -114,7 +123,10 @@ def _tech_news():
             if d and d.get("title"):
                 titles.append(d["title"])
         if titles:
-            return "Texnologiya yangiliklari: " + "; ".join(titles)
+            result = "Texnologiya yangiliklari: " + "; ".join(titles)
+            _news_cache["time"] = time.time()
+            _news_cache["data"] = result
+            return result
     except Exception:
         pass
     return "Bugun texnologiyalar olamida odatdagidek qizg'in ish kuni."
