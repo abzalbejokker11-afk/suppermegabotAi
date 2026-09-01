@@ -7,6 +7,9 @@ import logging
 import random
 import urllib.parse
 import datetime
+import time
+import json
+import os
 
 import requests
 
@@ -80,21 +83,43 @@ def answer_question(question: str) -> str:
 
 # ---------------------------------------------------------------- 2. Tonggi post
 def _weather():
+    cache_file = os.path.join(config.STATE_DIR, "weather_cache.json")
+    os.makedirs(config.STATE_DIR, exist_ok=True)
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                c = json.load(f)
+                if time.time() - c.get("time", 0) < 14400:
+                    return c.get("data", "")
+    except Exception:
+        pass
+
     try:
         r = requests.get(f"https://wttr.in/{config.CITY}?format=%C+%t", timeout=8)
         if r.status_code == 200 and len(r.text) < 120:
-            return f"{config.CITY} ob-havosi: {r.text.strip()}"
+            result = f"{config.CITY} ob-havosi: {r.text.strip()}"
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump({"time": time.time(), "data": result}, f)
+            except Exception:
+                pass
+            return result
     except Exception:
         pass
     return ""
 
 
-_news_cache = {"time": 0, "data": ""}
-
 def _tech_news():
-    global _news_cache
-    if time.time() - _news_cache["time"] < 3600:
-        return _news_cache["data"]
+    cache_file = os.path.join(config.STATE_DIR, "api_cache.json")
+    os.makedirs(config.STATE_DIR, exist_ok=True)
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                c = json.load(f)
+                if time.time() - c.get("time", 0) < 14400:
+                    return c.get("data", "")
+    except Exception:
+        pass
 
     try:
         headers = {"Accept": "application/vnd.github+json"}
@@ -108,8 +133,11 @@ def _tech_news():
             if items:
                 result = "Bugungi ochiq kodli loyihalar: " + "; ".join(
                     f"{i['name']} — {(i.get('description') or 'tavsifsiz')[:120]}" for i in items)
-                _news_cache["time"] = time.time()
-                _news_cache["data"] = result
+                try:
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump({"time": time.time(), "data": result}, f)
+                except Exception:
+                    pass
                 return result
     except Exception as e:
         log.warning("GitHub xatosi: %s", e)
@@ -124,8 +152,11 @@ def _tech_news():
                 titles.append(d["title"])
         if titles:
             result = "Texnologiya yangiliklari: " + "; ".join(titles)
-            _news_cache["time"] = time.time()
-            _news_cache["data"] = result
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump({"time": time.time(), "data": result}, f)
+            except Exception:
+                pass
             return result
     except Exception:
         pass
