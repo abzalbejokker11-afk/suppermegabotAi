@@ -353,11 +353,7 @@ async def handle_channel_post(message: Message):
 # ================================================================ JADVAL
 def setup_schedule():
     j = scheduler.add_job
-    j(job_morning, "cron", hour=7, minute=0, id="morning", replace_existing=True)
 
-    j(job_person, "cron", hour=13, minute=0, args=["Mirjalol"], id="p_mirjalol", replace_existing=True)
-    j(job_person, "cron", hour=14, minute=0, args=["Rahmatillo"], id="p_rahmatillo", replace_existing=True)
-    j(job_person, "cron", hour=15, minute=0, args=["Abdullo"], id="p_abdullo", replace_existing=True)
 
     j(job_antidoping, "cron", hour="*", minute=0, id="antidoping", replace_existing=True)
 

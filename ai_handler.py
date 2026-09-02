@@ -163,28 +163,6 @@ def _tech_news():
     return "Bugun texnologiyalar olamida odatdagidek qizg'in ish kuni."
 
 
-def generate_morning_post():
-    news = _tech_news()
-    weather = _weather()
-    prompt = f"""Sen tajribali IT blogersan. Telegram kanaling uchun tonggi post yozyapsan.
-
-Bugungi ma'lumotlar:
-{news}
-{weather}
-
-Shu ma'lumotlarga tayangan holda dasturchilar uchun qiziqarli, aniq faktlarga asoslangan
-va ruhlantiruvchi tonggi post yoz. Uzunligi uch to'rt abzats.
-{STYLE_RULES}"""
-
-    def offline():
-        return (f"Xayrli tong. {weather or ''} Bugungi kun yangi bilim olish uchun ajoyib imkoniyat. "
-                f"{news} Kichik bo'lsa ham bir qadam tashlang, kuningiz barakali o'tsin.")
-
-    out = generate(prompt, offline_fn=offline)
-    return clean_for_channel(out or offline())
-
-
-# ---------------------------------------------------------------- 3. Shaxsiy post
 def generate_person_post(person_name: str):
     bank = topics.PERSON_TRAITS.get(person_name, ["Unga ijobiy motivatsiya ber"])
     topic = topics.pick(f"person_{person_name}", bank)
