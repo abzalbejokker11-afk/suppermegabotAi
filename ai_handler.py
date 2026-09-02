@@ -257,7 +257,7 @@ TALABLAR:
 - Ovozli bot o'qishi uchun maxsus belgilar (*, #, _, emoji) ishlatma!
 
 BIRINCHI QATORGA: Ushbu mavzuga eng mos keluvchi bitta yoki ikkita INGLIZCHA kalit so'z yoz (masalan: "kidney", "heart", "laboratory", "athlete"). Haqiqiy rasm qidirish uchun kerak. Faqat kalit so'zning o'zi bo'lsin.
-IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA O'TA ILMIY MATN Yozing. Kamida 2500-3000 harfdan iborat, batafsil yoritilgan fojiali faktlar bo'lsin.
+IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA O'TA ILMIY MATN Yozing. Matn hajmi juda katta bo'lishi shart! Kamida 5000-7000 harfdan iborat, dostondek yirik, batafsil yoritilgan fojiali faktlar bo'lsin. Mavzuni iloji boricha chuqurroq va kengroq yoriting.
 QAT'IY TAQIQ: Matn boshida uzr so'rash, "Bugungi mavzu:", salomlashish umuman bo'lmasin. Faqat va faqat chuqur ilmiy daxshatli fakt va xulosalardan iborat maqola bo'lsin.
 {STYLE_RULES}"""
 
@@ -274,9 +274,10 @@ QAT'IY TAQIQ: Matn boshida uzr so'rash, "Bugungi mavzu:", salomlashish umuman bo
     full = generate(prompt, offline_fn=offline)
     text, img_prompt = _split_prompt_and_text(full, "laboratory")
 
-    if text and len(text) < config.MIN_SCIENCE_CHARS * 0.7:
-        expand = (f"Quyidagi matnni sifatini saqlagan holda kengaytir. "
-                  f"Mexanizm va tibbiy asoratlarni qo'sh.\n\nMATN:\n{text}\n\n{STYLE_RULES}")
+    if text and len(text) < 4000:
+        expand = (f"Quyidagi matnni sifatini saqlagan holda eng kamida 3-4 barobar kengaytir! "
+                  f"Mavzuni maksimal darajada yorit, tibbiy asoratlarni, aniq voqealarni va mexanizmlarni juda chuqur yoz. "
+                  f"Telegram postiga sig'maydigan darajada katta (5000+ harf) bo'lishi shart!\n\nMATN:\n{text}\n\n{STYLE_RULES}")
         bigger = generate(expand, allow_offline=False)
         if bigger and len(bigger) > len(text):
             text = bigger

@@ -24,7 +24,7 @@ async def generate_voice(text: str, filename: str) -> bool:
     import edge_tts
     voices = [config.VOICE_NAME] + [v for v in config.VOICE_FALLBACKS if v != config.VOICE_NAME]
     # Telegram ovozli xabari uchun matn juda uzun bo'lsa qisqartiramiz
-    speech = text if len(text) <= 6000 else text[:6000].rsplit(".", 1)[0] + "."
+    speech = text if len(text) <= 8000 else text[:8000].rsplit(".", 1)[0] + "."
     for voice in voices:
         for attempt in range(2):
             try:
@@ -102,7 +102,14 @@ async def publish(bot, text: str, image_url: str | None = None,
             fd, path = tempfile.mkstemp(suffix=".ogg")
             os.close(fd)
             try:
-                if await generate_voice(text, path):
+                # Ovozdan #Dars degan bosh qismini kesib tashlaymiz, Madina o'qimasligi uchun
+                voice_text = text
+                if voice_text.startswith("#"):
+                    parts = voice_text.split("\n\n", 1)
+                    if len(parts) == 2:
+                        voice_text = parts[1]
+                        
+                if await generate_voice(voice_text, path):
                     await _retry(
                         lambda: bot.send_voice(chat_id=config.CHANNEL_ID,
                                                voice=FSInputFile(path),
