@@ -99,7 +99,7 @@ async def publish(bot, text: str, image_url: str | None = None,
 
         # 3) Ovoz
         if with_voice:
-            fd, path = tempfile.mkstemp(suffix=".ogg")
+            fd, path = tempfile.mkstemp(suffix=".mp3")
             os.close(fd)
             try:
                 # Ovozdan #Dars degan bosh qismini kesib tashlaymiz, Madina o'qimasligi uchun
@@ -111,10 +111,12 @@ async def publish(bot, text: str, image_url: str | None = None,
                         
                 if await generate_voice(voice_text, path):
                     await _retry(
-                        lambda: bot.send_voice(chat_id=config.CHANNEL_ID,
-                                               voice=FSInputFile(path),
-                                               reply_to_message_id=first_msg_id),
-                        label="voice")
+                        lambda: bot.send_audio(chat_id=config.CHANNEL_ID,
+                                               audio=FSInputFile(path),
+                                               reply_to_message_id=first_msg_id,
+                                               title="Ilmiy Dars (Antidoping)",
+                                               performer="Madina Neural"),
+                        label="audio")
             finally:
                 try:
                     os.remove(path)

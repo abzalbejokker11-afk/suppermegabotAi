@@ -65,24 +65,21 @@ OPENAI_KEYS = _multi("OPENAI_API_KEY")
 GEMINI_MODELS = [
     m.strip() for m in os.getenv(
         "GEMINI_MODELS",
-        "gemini-2.5-flash,gemini-flash-latest,gemini-2.0-flash,gemini-2.5-flash-lite,gemini-2.0-flash-lite"
+        "gemini-3.6-flash,gemini-3.6-flash-lite"
     ).split(",") if m.strip()
 ]
 
 OPENROUTER_MODELS = [
     m.strip() for m in os.getenv(
         "OPENROUTER_MODELS",
-        "anthropic/claude-sonnet-5,"
-        "meta-llama/llama-3.3-70b-instruct,"
-        "deepseek/deepseek-chat,"
-        "qwen/qwen-2.5-72b-instruct"
+        "openrouter/auto,mistralai/mistral-7b-instruct:free"
     ).split(",") if m.strip()
 ]
 
 GROQ_MODELS = [
     m.strip() for m in os.getenv(
         "GROQ_MODELS",
-        "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+        "qwen/qwen3.8-27b,qwen/qwen3.6-27b,groq/compound"
     ).split(",") if m.strip()
 ]
 
