@@ -288,6 +288,41 @@ async def process_topic_callback(callback_query: CallbackQuery):
     except Exception as e:
         await bot.send_message(callback_query.from_user.id, f"Xatolik yuz berdi: {e}")
 
+
+@dp.message(lambda msg: msg.text and msg.text.startswith("/mavzu_"))
+async def process_slash_mavzu(message: Message):
+    if not is_admin(message):
+        return
+    await message.reply("Mavzu tayyorlanmoqda, kuting...")
+    
+    try:
+        idx_str = message.text.split("_")[1].split("@")[0] # handle /mavzu_1@bot_name
+        idx = int(idx_str) - 1
+        
+        import topics
+        import kv_storage
+        
+        if idx < 0 or idx >= len(topics.ANTIDOPING):
+            await message.reply("Bunday mavzu raqami yo'q.")
+            return
+            
+        st = kv_storage.kv_get("topics_state", {})
+        st["antidoping_idx"] = idx
+        kv_storage.kv_set("topics_state", st)
+        
+        from ai_handler import generate_antidoping_post
+        import asyncio
+        from publisher import publish
+        
+        text, img = await asyncio.to_thread(generate_antidoping_post)
+        if text:
+            await publish(bot, text, img, with_voice=True)
+            await bot.send_message(message.from_user.id, f"✅ #{idx+1}-Mavzu kanalga muvaffaqiyatli joylandi!")
+        else:
+            await bot.send_message(message.from_user.id, "Xatolik: Matn bo'sh chiqdi.")
+    except Exception as e:
+        await bot.send_message(message.from_user.id, f"Xatolik yuz berdi: {e}")
+
 @dp.message()
 async def handle_questions(message: Message):
     text = (message.text or "").strip()
@@ -353,13 +388,20 @@ async def run_bot():
         if not config.BOT_TOKEN:
             return
 
-    await bot.set_my_commands([
-        BotCommand(command="mavzular", description="📚 Barcha 13 ta Antidoping Darslari"),
+    import topics
+    cmds = []
+    for i, t in enumerate(topics.ANTIDOPING):
+        # Telegram command description is limited to 256 chars
+        desc = t[:250]
+        cmds.append(BotCommand(command=f"mavzu_{i+1}", description=desc))
+    
+    cmds.extend([
         BotCommand(command="antidoping", description="Bitta tasodifiy Ilmiy post"),
         BotCommand(command="maxsus_ovoz", description="Maxsus ovozli xabar"),
         BotCommand(command="eslatma", description="Aniq vaqtli eslatma"),
         BotCommand(command="holat", description="Bot holati"),
     ])
+    await bot.set_my_commands(cmds)
 
     if not scheduler.running:
         setup_schedule()
