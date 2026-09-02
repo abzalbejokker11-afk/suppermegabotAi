@@ -22,8 +22,7 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 import ai_engine
 import config
 import topics
-from ai_handler import (answer_question, generate_antidoping_post,
-                        generate_morning_post, generate_person_post, parse_reminder)
+from ai_handler import (answer_question, generate_antidoping_post, parse_reminder)
 from keep_alive import STATUS, keep_alive
 from publisher import publish, generate_voice
 from textutils import clean_for_channel
