@@ -248,7 +248,7 @@ async def process_reminder(message: Message, state: FSMContext):
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-@dp.message(Command("mavzular"))
+@dp.message(Command("mavzular", "start"))
 async def show_topics_menu(message: Message):
     if not is_admin(message):
         return
@@ -354,14 +354,11 @@ async def run_bot():
             return
 
     await bot.set_my_commands([
-        BotCommand(command="antidoping", description="Ilmiy antidoping post"),
-        BotCommand(command="tonggi_post", description="Tonggi post"),
-        BotCommand(command="rahmatillo", description="Rahmatillo uchun post"),
-        BotCommand(command="mirjalol", description="Mirjalol uchun post"),
-        BotCommand(command="abdullo", description="Abdullo uchun post"),
+        BotCommand(command="mavzular", description="📚 Barcha 13 ta Antidoping Darslari"),
+        BotCommand(command="antidoping", description="Bitta tasodifiy Ilmiy post"),
         BotCommand(command="maxsus_ovoz", description="Maxsus ovozli xabar"),
         BotCommand(command="eslatma", description="Aniq vaqtli eslatma"),
-        BotCommand(command="holat", description="Bot va AI holati"),
+        BotCommand(command="holat", description="Bot holati"),
     ])
 
     if not scheduler.running:

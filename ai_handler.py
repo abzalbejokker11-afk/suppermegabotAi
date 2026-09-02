@@ -257,8 +257,8 @@ TALABLAR:
 - Ovozli bot o'qishi uchun maxsus belgilar (*, #, _, emoji) ishlatma!
 
 BIRINCHI QATORGA: Ushbu mavzuga eng mos keluvchi bitta yoki ikkita INGLIZCHA kalit so'z yoz (masalan: "kidney", "heart", "laboratory", "athlete"). Haqiqiy rasm qidirish uchun kerak. Faqat kalit so'zning o'zi bo'lsin.
-IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY MATN.
-Matn boshida uzr so'rash, salomlashish umuman bo'lmasin. Faqat chuqur ilmiy fakt.
+IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA O'TA ILMIY MATN Yozing. Kamida 2500-3000 harfdan iborat, batafsil yoritilgan fojiali faktlar bo'lsin.
+QAT'IY TAQIQ: Matn boshida uzr so'rash, "Bugungi mavzu:", salomlashish umuman bo'lmasin. Faqat va faqat chuqur ilmiy daxshatli fakt va xulosalardan iborat maqola bo'lsin.
 {STYLE_RULES}"""
 
     def offline():
