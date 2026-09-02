@@ -245,6 +245,49 @@ async def process_reminder(message: Message, state: FSMContext):
 
 
 # ---------------------------------------------------------------- savollar
+
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+
+@dp.message(Command("mavzular"))
+async def show_topics_menu(message: Message):
+    if not is_admin(message):
+        return
+    import topics
+    markup = InlineKeyboardMarkup(inline_keyboard=[])
+    for i, t in enumerate(topics.ANTIDOPING):
+        markup.inline_keyboard.append([InlineKeyboardButton(text=f"{i+1}. {t[:40]}...", callback_data=f"topic_{i}")])
+    
+    await message.reply("Quyidagi mavzulardan birini tanlang. Tanlangan mavzu to'g'ridan-to'g'ri kanalga joylanadi:", reply_markup=markup)
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("topic_"))
+async def process_topic_callback(callback_query: CallbackQuery):
+    if not is_admin(callback_query.message):
+        return
+    await callback_query.answer("Mavzu tayyorlanmoqda, kuting...")
+    
+    idx = int(callback_query.data.split("_")[1])
+    import topics
+    topic_name = topics.ANTIDOPING[idx]
+    
+    # We set the sequence state to this idx so that ai_handler thinks it's this topic
+    import kv_storage
+    st = kv_storage.kv_get("topics_state", {})
+    st["antidoping_idx"] = idx
+    kv_storage.kv_set("topics_state", st)
+    
+    try:
+        from ai_handler import generate_antidoping_post
+        import asyncio
+        from publisher import publish
+        text, img = await asyncio.to_thread(generate_antidoping_post)
+        if text:
+            await publish(bot, text, img, with_voice=True)
+            await bot.send_message(callback_query.from_user.id, f"✅ #{idx+1}-Mavzu kanalga muvaffaqiyatli joylandi!")
+        else:
+            await bot.send_message(callback_query.from_user.id, "Xatolik: Matn bo'sh chiqdi.")
+    except Exception as e:
+        await bot.send_message(callback_query.from_user.id, f"Xatolik yuz berdi: {e}")
+
 @dp.message()
 async def handle_questions(message: Message):
     text = (message.text or "").strip()
@@ -281,8 +324,7 @@ def setup_schedule():
     j(job_person, "cron", hour=14, minute=0, args=["Rahmatillo"], id="p_rahmatillo", replace_existing=True)
     j(job_person, "cron", hour=15, minute=0, args=["Abdullo"], id="p_abdullo", replace_existing=True)
 
-    # Antidoping — kunning asosiy mahsuloti: har ikki soatda, 8:30 dan 22:30 gacha
-    j(job_antidoping, "cron", hour="8-22/2", minute=30, id="antidoping", replace_existing=True)
+    j(job_antidoping, "cron", hour="*", minute=0, id="antidoping", replace_existing=True)
 
     log.info("Jadval o'rnatildi: %d ta vazifa", len(scheduler.get_jobs()))
 

@@ -229,7 +229,9 @@ IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA MATN.
 
 # ---------------------------------------------------------------- 4. ANTIDOPING (asosiy)
 def generate_antidoping_post():
-    topic = topics.pick("antidoping", topics.ANTIDOPING)
+    idx, total = topics.progress("antidoping", topics.ANTIDOPING)
+    topic = topics.pick_sequential("antidoping", topics.ANTIDOPING)
+    topic_number = idx + 1
     
     styles = [
         "1. Ilmiy-akademik tahlil: Muammo qo'yilishi, biokimyoviy mexanizm, analitik metodika, amaliy xulosa. Jiddiy va sof ilmiy ohangda yoz.",
@@ -254,10 +256,9 @@ TALABLAR:
 - O'ylab topilgan raqam, soxta statistika yoki mavjud bo'lmagan tadqiqotga havola keltirma.
 - Ovozli bot o'qishi uchun maxsus belgilar (*, #, _, emoji) ishlatma!
 
-BIRINCHI QATORGA: shu mavzuga mos, sun'iy intellekt rasm chizishi uchun INGLIZ TILIDA
-qisqa prompt yoz (masalan: "modern anti-doping laboratory, mass spectrometer,
-scientist analyzing blood sample, blue cinematic lighting"). Faqat promptning o'zi.
+BIRINCHI QATORGA: Ushbu mavzuga eng mos keluvchi bitta yoki ikkita INGLIZCHA kalit so'z yoz (masalan: "kidney", "heart", "laboratory", "athlete"). Haqiqiy rasm qidirish uchun kerak. Faqat kalit so'zning o'zi bo'lsin.
 IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY MATN.
+Matn boshida uzr so'rash, salomlashish umuman bo'lmasin. Faqat chuqur ilmiy fakt.
 {STYLE_RULES}"""
 
     def offline():
@@ -271,21 +272,20 @@ IKKINCHI QATORDAN BOSHLAB O'ZBEKCHA ILMIY MATN.
                 "Toza sport — bu nafaqat qoida, bu sportchining sog'lig'i va uzoq yillik karyerasi kafolati.")
 
     full = generate(prompt, offline_fn=offline)
-    text, img_prompt = _split_prompt_and_text(
-        full, "modern anti-doping laboratory, mass spectrometer, scientific, cinematic lighting")
+    text, img_prompt = _split_prompt_and_text(full, "laboratory")
 
-    # SIFAT NAZORATI: post juda qisqa bo'lsa — kengaytirish uchun ikkinchi urinish
     if text and len(text) < config.MIN_SCIENCE_CHARS * 0.7:
-        log.info("Post qisqa (%d belgi) — kengaytirilmoqda", len(text))
-        expand = (f"Quyidagi ilmiy matnni sifatini saqlagan holda ikki barobar kengaytir. "
-                  f"Mexanizmni chuqurroq tushuntir, analitik metodikani batafsil yoz, "
-                  f"sog'liq uchun oqibatlarni organ tizimlari bo'yicha och. "
-                  f"Yangi soxta raqam qo'shma.\n\nMATN:\n{text}\n\n{STYLE_RULES}")
+        expand = (f"Quyidagi matnni sifatini saqlagan holda kengaytir. "
+                  f"Mexanizm va tibbiy asoratlarni qo'sh.\n\nMATN:\n{text}\n\n{STYLE_RULES}")
         bigger = generate(expand, allow_offline=False)
         if bigger and len(bigger) > len(text):
             text = bigger
 
-    return clean_for_channel(text), _image_url(img_prompt)
+    final_text = clean_for_channel(text)
+    # Rasim tagiga raqamni qoshiyamiz, Madina oqimaydi chunki caption sifatida ketadi.
+    final_text = f"#{topic_number}-Dars: {topic}\n\n{final_text}"
+    
+    return final_text, _image_url(img_prompt)
 
 
 # ---------------------------------------------------------------- 5. Eslatma tahlili
