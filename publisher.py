@@ -22,13 +22,22 @@ _post_lock = asyncio.Lock()  # bir vaqtda faqat bitta post — takrorlanishning 
 async def generate_voice(text: str, filename: str) -> bool:
     """edge-tts orqali ovoz. Bir nechta ovoz varianti bilan qayta uriniladi."""
     import edge_tts
+    try:
+        from normalizer import normalize_for_tts
+    except ImportError:
+        def normalize_for_tts(x): return x
+
     voices = [config.VOICE_NAME] + [v for v in config.VOICE_FALLBACKS if v != config.VOICE_NAME]
     # Telegram ovozli xabari uchun matn juda uzun bo'lsa qisqartiramiz
     speech = text if len(text) <= 8000 else text[:8000].rsplit(".", 1)[0] + "."
+    
+    # 🧠 Matnni insoniylashtirish (raqamlar, WADA, qisqartmalarni tozalash)
+    speech = normalize_for_tts(speech)
+    
     for voice in voices:
         for attempt in range(2):
             try:
-                communicate = edge_tts.Communicate(speech, voice)
+                communicate = edge_tts.Communicate(speech, voice, rate="-10%")
                 await asyncio.wait_for(communicate.save(filename), timeout=180)
                 if os.path.exists(filename) and os.path.getsize(filename) > 2000:
                     return True
@@ -108,6 +117,13 @@ async def publish(bot, text: str, image_url: str | None = None,
                     parts = voice_text.split("\n\n", 1)
                     if len(parts) == 2:
                         voice_text = parts[1]
+                
+                # UZBEK HUMAN VOICE BRAIN INTEGRATSIYASI
+                try:
+                    from voice_integration import normalize_text_for_voice
+                    voice_text = normalize_text_for_voice(voice_text)
+                except Exception as e:
+                    log.error(f"Voice brain integratsiyasi xatosi: {e}")
                         
                 if await generate_voice(voice_text, path):
                     await _retry(
